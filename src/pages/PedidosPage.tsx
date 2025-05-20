@@ -10,6 +10,7 @@ interface DetallePedido {
     precio_total: number;
     fecha_estimada_entrega: string;
     nombre_producto: string;
+    tipo: string;
 }
 
 interface Pedido {
@@ -95,7 +96,7 @@ const PedidosPage = () => {
                                         <ul className="list-disc pl-4">
                                             {p.detalles.map((detalle) => (
                                                 <li key={detalle.id_detalle_pedido}>
-                                                    {detalle.nombre_producto} - {detalle.cantidad_pedida} unidades
+                                                    {detalle.nombre_producto} ({detalle.tipo}) - {detalle.cantidad_pedida} uds.
                                                 </li>
                                             ))}
                                         </ul>

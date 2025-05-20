@@ -10,18 +10,26 @@ const MiPerfilPage = () => {
 
   const [form, setForm] = useState({
     nombre: "",
-    email: ""
+    email: "",
+    id_rol: 0
   });
 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchUsuario = async () => {
+      if (!usuario?.id) return;
+
       try {
         const res = await axios.get(`http://localhost:3000/api/usuarios/${usuario?.id}`, {
           headers: { Authorization: `Bearer ${getToken()}` }
         });
-        setForm(res.data);
+        console.log("🎯 Datos recibidos:", res.data); // <-- revisa aquí
+        setForm({
+          nombre: res.data.nombre,
+          email: res.data.email,
+          id_rol: res.data.id_rol
+        });
       } catch (error) {
         alert("Error al cargar perfil");
       } finally {
@@ -30,7 +38,7 @@ const MiPerfilPage = () => {
     };
 
     fetchUsuario();
-  }, [usuario]);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -48,7 +56,7 @@ const MiPerfilPage = () => {
         }
       );
       alert("Perfil actualizado correctamente");
-      navigate("/");
+      navigate("/home");
     } catch (error) {
       alert("Error al actualizar perfil");
     }
@@ -66,7 +74,7 @@ const MiPerfilPage = () => {
           <input
             type="text"
             name="nombre"
-            value={form.nombre}
+            value={form.nombre || ""}
             onChange={handleChange}
             className="w-full p-2 border rounded"
           />
@@ -77,7 +85,7 @@ const MiPerfilPage = () => {
           <input
             type="email"
             name="email"
-            value={form.email}
+            value={form.email || ""}
             onChange={handleChange}
             className="w-full p-2 border rounded"
           />

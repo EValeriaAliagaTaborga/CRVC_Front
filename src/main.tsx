@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
+import AccesoDenegadoPage from "./pages/AccesoDenegadoPage";
 import HomePage from "./pages/HomePage";
 import PrivateRoute from "./components/PrivateRoute";
 import ClientesPage from "./pages/ClientesPage";
@@ -16,16 +17,22 @@ import EditarEstadoPedidoPage from "./pages/EditarEstadoPedidoPage";
 import ProductosPage from "./pages/ProductosPage";
 import CrearProductoPage from "./pages/CrearProductoPage";
 import EditarProductoPage from "./pages/EditarProductoPage";
+import ProduccionPage from "./pages/ProduccionPage";
+import CrearOrdenPage from "./pages/CrearOrdenPage";
+import ActualizarOrdenPage from "./pages/EditarOrdenPage";
 import MiPerfilPage from "./pages/MiPerfilPage";
 import DashboardLayout from "./layouts/DashboardLayout";
 
 import "./index.css";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LoginPage />} />
+        <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
         <Route path="/home" element={
           <PrivateRoute>
             <DashboardLayout>
@@ -34,86 +41,107 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           </PrivateRoute>
         } />
         <Route path="/clientes" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
             <DashboardLayout>
               <ClientesPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/clientes/crear" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
             <DashboardLayout>
               <CrearClientePage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/clientes/:id" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
             <DashboardLayout>
               <EditarClientePage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/construcciones" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
             <DashboardLayout>
               <ConstruccionesPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/construcciones/crear" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
             <DashboardLayout>
               <CrearConstruccionPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/construcciones/editar/:id" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
             <DashboardLayout>
               <EditarConstruccionPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/pedidos" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
             <DashboardLayout>
               <PedidosPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/pedidos/crear" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
             <DashboardLayout>
               <CrearPedidoPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/pedidos/:id/estado" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
             <DashboardLayout>
               <EditarEstadoPedidoPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/productos" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Encargado de Producción"]}>
             <DashboardLayout>
               <ProductosPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/productos/crear" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Encargado de Producción"]}>
             <DashboardLayout>
               <CrearProductoPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
         <Route path="/productos/:id/editar" element={
-          <PrivateRoute>
+          <PrivateRoute rolesPermitidos={["Administrador", "Encargado de Producción"]}>
             <DashboardLayout>
               <EditarProductoPage />
+            </DashboardLayout>
+          </PrivateRoute>
+        } />
+        <Route path="/produccion" element={
+          <PrivateRoute rolesPermitidos={["Administrador", "Encargado de Producción"]}>
+            <DashboardLayout>
+              <ProduccionPage />
+            </DashboardLayout>
+          </PrivateRoute>
+        } />
+        <Route path="/produccion/crear" element={
+          <PrivateRoute rolesPermitidos={["Administrador", "Encargado de Producción"]}>
+            <DashboardLayout>
+              <CrearOrdenPage />
+            </DashboardLayout>
+          </PrivateRoute>
+        } />
+        <Route path="/produccion/:id/editar" element={
+          <PrivateRoute rolesPermitidos={["Administrador", "Encargado de Producción"]}>
+            <DashboardLayout>
+              <ActualizarOrdenPage />
             </DashboardLayout>
           </PrivateRoute>
         } />
@@ -125,6 +153,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           </PrivateRoute>
         } />
       </Routes>
+      <ToastContainer position="top-right" autoClose={3000} />
     </BrowserRouter>
   </React.StrictMode>
 );

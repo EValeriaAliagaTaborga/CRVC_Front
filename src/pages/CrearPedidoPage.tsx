@@ -13,6 +13,7 @@ interface Producto {
     id_producto: string;
     nombre_producto: string;
     precio_unitario: number;
+    tipo: string;
 }
 
 interface DetallePedido {
@@ -179,7 +180,7 @@ const CrearPedidoPage = () => {
                                 <option value="">Seleccione producto</option>
                                 {productos.map(p => (
                                     <option key={p.id_producto} value={p.id_producto}>
-                                        {p.nombre_producto}
+                                        {p.nombre_producto} - {p.tipo}
                                     </option>
                                 ))}
                             </select>

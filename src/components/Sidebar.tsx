@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { getUsuario } from "../services/user";
 import { removeToken } from "../services/auth";
+import { tienePermiso } from "../services/permisos"; // Asegúrate que importa de donde tienes getUsuario
 
 const Sidebar = () => {
   const usuario = getUsuario();
@@ -14,7 +15,7 @@ const Sidebar = () => {
   return (
     <div className="w-64 h-screen bg-gray-800 text-white flex flex-col">
       <div className="p-6 text-xl font-bold border-b border-gray-700">
-        🧱 Cerámica Roja
+        🧱 Cerámica Roja Virgen de Copacabana
       </div>
 
       <div className="p-4 border-b border-gray-700">
@@ -23,14 +24,57 @@ const Sidebar = () => {
       </div>
 
       <nav className="flex-1 px-4 py-2 space-y-2 text-sm">
-        <Link to="/home" className="block hover:bg-gray-700 p-2 rounded">🏠 Página Principal</Link>
-        <Link to="/clientes" className="block hover:bg-gray-700 p-2 rounded">👤 Clientes</Link>
-        <Link to="/construcciones" className="block hover:bg-gray-700 p-2 rounded">🏗️ Construcciones</Link>
-        <Link to="/pedidos" className="block hover:bg-gray-700 p-2 rounded">📦 Pedidos</Link>
-        <Link to="/produccion" className="block hover:bg-gray-700 p-2 rounded">🔥 Producción</Link>
-        <Link to="/productos" className="block hover:bg-gray-700 p-2 rounded">📦 Productos</Link>
-        <Link to="/perfil" className="block hover:bg-gray-700 p-2 rounded">🙋‍♀️ Mi perfil</Link>
-        <Link to="/admin" className="block hover:bg-gray-700 p-2 rounded">⚙️ Administración</Link>
+      <ul className="space-y-2">
+        <li>
+          <Link to="/home" className="text-gray-700 hover:text-gray-900">Inicio</Link>
+        </li>
+
+        {/* Clientes */}
+        {tienePermiso(["Administrador", "Vendedor"]) && (
+          <li>
+            <Link to="/clientes" className="text-gray-700 hover:text-gray-900">Clientes</Link>
+          </li>
+        )}
+
+        {/* Construcciones */}
+        {tienePermiso(["Administrador", "Vendedor"]) && (
+          <li>
+            <Link to="/construcciones" className="text-gray-700 hover:text-gray-900">Construcciones</Link>
+          </li>
+        )}
+
+        {/* Pedidos */}
+        {tienePermiso(["Administrador", "Vendedor"]) && (
+          <li>
+            <Link to="/pedidos" className="text-gray-700 hover:text-gray-900">Pedidos</Link>
+          </li>
+        )}
+
+        {/* Producción */}
+        {tienePermiso(["Administrador", "Encargado de Producción"]) && (
+          <li>
+            <Link to="/produccion" className="text-gray-700 hover:text-gray-900">Producción</Link>
+          </li>
+        )}
+
+        {/* Productos */}
+        {tienePermiso(["Administrador", "Encargado de Producción"]) && (
+          <li>
+            <Link to="/productos" className="text-gray-700 hover:text-gray-900">Productos</Link>
+          </li>
+        )}
+
+        {/* Administracion */}
+        {tienePermiso(["Administrador"]) && (
+          <li>
+            <Link to="/admin" className="text-gray-700 hover:text-gray-900">Administracion</Link>
+          </li>
+        )}
+
+          <li>
+            <Link to="/perfil" className="block hover:bg-gray-700 p-2 rounded">🙋‍♀️ Mi perfil</Link>
+          </li>
+        </ul>
       </nav>
 
       <div className="p-4 border-t border-gray-700">
