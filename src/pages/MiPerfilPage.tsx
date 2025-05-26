@@ -3,6 +3,8 @@ import axios from "axios";
 import { getToken } from "../services/auth";
 import { getUsuario } from "../services/user";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
+
 
 const MiPerfilPage = () => {
   const usuario = getUsuario(); // { id, nombre, email }
@@ -55,10 +57,10 @@ const MiPerfilPage = () => {
           headers: { Authorization: `Bearer ${getToken()}` }
         }
       );
-      alert("Perfil actualizado correctamente");
+      toast.success("Perfil actualizado correctamente ✅");
       navigate("/home");
     } catch (error) {
-      alert("Error al actualizar perfil");
+      toast.error("Error al actualizar perfil ❌");
     }
   };
 

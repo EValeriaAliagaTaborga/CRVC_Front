@@ -26,48 +26,48 @@ const Sidebar = () => {
       <nav className="flex-1 px-4 py-2 space-y-2 text-sm">
       <ul className="space-y-2">
         <li>
-          <Link to="/home" className="text-gray-700 hover:text-gray-900">Inicio</Link>
+          <Link to="/home" className="text-gray-50 hover:text-red-600">Inicio</Link>
         </li>
 
         {/* Clientes */}
         {tienePermiso(["Administrador", "Vendedor"]) && (
           <li>
-            <Link to="/clientes" className="text-gray-700 hover:text-gray-900">Clientes</Link>
+            <Link to="/clientes" className="text-gray-50 hover:text-red-600">Clientes</Link>
           </li>
         )}
 
         {/* Construcciones */}
         {tienePermiso(["Administrador", "Vendedor"]) && (
           <li>
-            <Link to="/construcciones" className="text-gray-700 hover:text-gray-900">Construcciones</Link>
+            <Link to="/construcciones" className="text-gray-50 hover:text-red-600">Construcciones</Link>
           </li>
         )}
 
         {/* Pedidos */}
         {tienePermiso(["Administrador", "Vendedor"]) && (
           <li>
-            <Link to="/pedidos" className="text-gray-700 hover:text-gray-900">Pedidos</Link>
+            <Link to="/pedidos" className="text-gray-50 hover:text-red-600">Pedidos</Link>
           </li>
         )}
 
         {/* Producción */}
         {tienePermiso(["Administrador", "Encargado de Producción"]) && (
           <li>
-            <Link to="/produccion" className="text-gray-700 hover:text-gray-900">Producción</Link>
+            <Link to="/produccion" className="text-gray-50 hover:text-red-600">Producción</Link>
           </li>
         )}
 
         {/* Productos */}
         {tienePermiso(["Administrador", "Encargado de Producción"]) && (
           <li>
-            <Link to="/productos" className="text-gray-700 hover:text-gray-900">Productos</Link>
+            <Link to="/productos" className="text-gray-50 hover:text-red-600">Productos</Link>
           </li>
         )}
 
         {/* Administracion */}
         {tienePermiso(["Administrador"]) && (
           <li>
-            <Link to="/admin" className="text-gray-700 hover:text-gray-900">Administracion</Link>
+            <Link to="/administracion" className="text-gray-50 hover:text-red-600">Administracion</Link>
           </li>
         )}
 

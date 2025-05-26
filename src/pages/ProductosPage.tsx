@@ -13,14 +13,18 @@ interface Producto {
 
 const ProductosPage = () => {
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [filtroNombre, setFiltroNombre] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState("");
+  const [paginaActual, setPaginaActual] = useState(1);
+  const productosPorPagina = 20;
 
   useEffect(() => {
     const fetchProductos = async () => {
       try {
         const res = await axios.get("http://localhost:3000/api/productos", {
           headers: {
-            Authorization: `Bearer ${getToken()}`
-          }
+            Authorization: `Bearer ${getToken()}`,
+          },
         });
         setProductos(res.data);
       } catch (error) {
@@ -31,15 +35,26 @@ const ProductosPage = () => {
     fetchProductos();
   }, []);
 
+  const productosFiltrados = productos.filter((p) =>
+    p.nombre_producto.toLowerCase().includes(filtroNombre.toLowerCase()) &&
+    (filtroTipo ? p.tipo === filtroTipo : true)
+  );
+
+  const totalPaginas = Math.ceil(productosFiltrados.length / productosPorPagina);
+  const productosPagina = productosFiltrados.slice(
+    (paginaActual - 1) * productosPorPagina,
+    paginaActual * productosPorPagina
+  );
+
   const handleEliminar = async (id_producto: string) => {
     if (!window.confirm("¿Estás seguro de eliminar este producto?")) return;
     try {
       await axios.delete(`http://localhost:3000/api/productos/${id_producto}`, {
         headers: {
-          Authorization: `Bearer ${getToken()}`
-        }
+          Authorization: `Bearer ${getToken()}`,
+        },
       });
-      setProductos(productos.filter(p => p.id_producto !== id_producto));
+      setProductos(productos.filter((p) => p.id_producto !== id_producto));
     } catch (error) {
       alert("Error al eliminar el producto");
     }
@@ -57,6 +72,31 @@ const ProductosPage = () => {
         </Link>
       </div>
 
+      <div className="mb-4 flex gap-4 items-end">
+        <div>
+          <label className="block text-sm">Buscar por nombre</label>
+          <input
+            type="text"
+            value={filtroNombre}
+            onChange={(e) => setFiltroNombre(e.target.value)}
+            className="border rounded p-2"
+          />
+        </div>
+        <div>
+          <label className="block text-sm">Filtrar por tipo</label>
+          <select
+            value={filtroTipo}
+            onChange={(e) => setFiltroTipo(e.target.value)}
+            className="border rounded p-2"
+          >
+            <option value="">Todos</option>
+            <option value="Primera">Primera</option>
+            <option value="Segunda">Segunda</option>
+            <option value="Tercera">Tercera</option>
+          </select>
+        </div>
+      </div>
+
       <div className="bg-white shadow-md rounded overflow-x-auto">
         <table className="min-w-full text-sm table-auto">
           <thead className="bg-gray-200">
@@ -70,7 +110,7 @@ const ProductosPage = () => {
             </tr>
           </thead>
           <tbody>
-            {productos.map((p) => (
+            {productosPagina.map((p) => (
               <tr key={p.id_producto} className="border-t">
                 <td className="px-4 py-2">{p.id_producto}</td>
                 <td className="px-4 py-2">{p.nombre_producto}</td>
@@ -93,16 +133,31 @@ const ProductosPage = () => {
                 </td>
               </tr>
             ))}
-            {productos.length === 0 && (
+            {productosPagina.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-center py-4 text-gray-500">
-                  No hay productos registrados.
+                  No se encontraron productos.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Paginación */}
+      {totalPaginas > 1 && (
+        <div className="flex justify-center mt-6 gap-2">
+          {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((n) => (
+            <button
+              key={n}
+              onClick={() => setPaginaActual(n)}
+              className={`px-3 py-1 rounded ${n === paginaActual ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800"}`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

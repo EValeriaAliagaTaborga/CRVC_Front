@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getToken } from "../services/auth";
+import { toast } from "react-toastify";
+
 
 interface Producto {
   id_producto: string;
@@ -13,14 +15,15 @@ const CrearOrdenPage = () => {
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
-    id_producto: "",
+    nombre_producto: "",
     id_vagon: 0,
     fecha_carga: new Date().toISOString().slice(0, 10),
     cantidad_inicial_por_producir: 0,
     estado_orden: "En progreso"
   });
 
-  const [productos, setProductos] = useState<Producto[]>([]);
+
+  const [tiposUnicos, setTiposUnicos] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchProductos = async () => {
@@ -28,9 +31,12 @@ const CrearOrdenPage = () => {
         const res = await axios.get("http://localhost:3000/api/productos", {
           headers: { Authorization: `Bearer ${getToken()}` }
         });
-        setProductos(res.data);
+        //console.log("📦 Productos recibidos:", res.data);
+        // Obtener nombres únicos
+        const nombres = [...new Set(res.data.map((p: Producto) => p.nombre_producto as string))] as string[];
+        setTiposUnicos(nombres);
       } catch (error) {
-        alert("Error al cargar productos");
+        toast.error("Error al cargar productos");
       }
     };
 
@@ -49,8 +55,8 @@ const CrearOrdenPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.id_producto || form.id_vagon <= 0 || form.cantidad_inicial_por_producir <= 0) {
-      alert("Por favor completa todos los campos correctamente");
+    if (!form.nombre_producto || form.id_vagon <= 0 || form.cantidad_inicial_por_producir <= 0) {
+      toast.error("Por favor completa todos los campos correctamente");
       return;
     }
 
@@ -58,9 +64,10 @@ const CrearOrdenPage = () => {
       await axios.post("http://localhost:3000/api/produccion", form, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
+      toast.success("Orden registrada correctamente ✅");
       navigate("/produccion");
     } catch (error) {
-      alert("Error al registrar orden");
+      toast.error("Error al registrar orden");
     }
   };
 
@@ -72,15 +79,15 @@ const CrearOrdenPage = () => {
         <div>
           <label className="block font-medium mb-1">Producto</label>
           <select
-            name="id_producto"
-            value={form.id_producto}
+            name="nombre_producto"
+            value={form.nombre_producto}
             onChange={handleChange}
             className="w-full p-2 border rounded"
           >
-            <option value="">Seleccionar producto</option>
-            {productos.map((p) => (
-              <option key={p.id_producto} value={p.id_producto}>
-                {p.nombre_producto}
+            <option value="">Seleccionar tipo de ladrillo</option>
+            {tiposUnicos.map((nombre) => (
+              <option key={nombre} value={nombre}>
+                {nombre}
               </option>
             ))}
           </select>
