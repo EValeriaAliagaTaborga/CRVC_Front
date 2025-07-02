@@ -64,6 +64,13 @@ const Sidebar = () => {
           </li>
         )}
 
+        {/* Métricas y Gráficos */}
+        {tienePermiso(["Administrador"]) && (
+          <li>
+            <Link to="/dashboard/metricas" className="text-gray-50 hover:text-red-600">Métricas y Gráficos</Link>
+          </li>
+        )}
+
         {/* Administracion */}
         {tienePermiso(["Administrador"]) && (
           <li>

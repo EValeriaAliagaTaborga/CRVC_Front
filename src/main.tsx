@@ -24,6 +24,7 @@ import MiPerfilPage from "./pages/MiPerfilPage";
 import AdministracionPage from "./pages/AdministracionPage";
 import EditarUsuarioPage from "./pages/EditarUsuarioPage";
 import DashboardLayout from "./layouts/DashboardLayout";
+import MetricasPage from "./pages/MetricasPage";
 
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./index.css";
@@ -215,6 +216,16 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <PrivateRoute>
                 <DashboardLayout>
                   <MiPerfilPage />
+                </DashboardLayout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/metricas"
+            element={
+              <PrivateRoute rolesPermitidos={["Administrador"]}>
+                <DashboardLayout>
+                  <MetricasPage />
                 </DashboardLayout>
               </PrivateRoute>
             }
