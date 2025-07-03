@@ -35,12 +35,15 @@ const ProductosPage = () => {
     fetchProductos();
   }, []);
 
-  const productosFiltrados = productos.filter((p) =>
-    p.nombre_producto.toLowerCase().includes(filtroNombre.toLowerCase()) &&
-    (filtroTipo ? p.tipo === filtroTipo : true)
+  const productosFiltrados = productos.filter(
+    (p) =>
+      p.nombre_producto.toLowerCase().includes(filtroNombre.toLowerCase()) &&
+      (filtroTipo ? p.tipo === filtroTipo : true)
   );
 
-  const totalPaginas = Math.ceil(productosFiltrados.length / productosPorPagina);
+  const totalPaginas = Math.ceil(
+    productosFiltrados.length / productosPorPagina
+  );
   const productosPagina = productosFiltrados.slice(
     (paginaActual - 1) * productosPorPagina,
     paginaActual * productosPorPagina
@@ -79,7 +82,7 @@ const ProductosPage = () => {
             type="text"
             value={filtroNombre}
             onChange={(e) => setFiltroNombre(e.target.value)}
-            className="border rounded p-2"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
@@ -87,7 +90,7 @@ const ProductosPage = () => {
           <select
             value={filtroTipo}
             onChange={(e) => setFiltroTipo(e.target.value)}
-            className="border rounded p-2"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Todos</option>
             <option value="Primera">Primera</option>
@@ -116,7 +119,9 @@ const ProductosPage = () => {
                 <td className="px-4 py-2">{p.nombre_producto}</td>
                 <td className="px-4 py-2">{p.tipo}</td>
                 <td className="px-4 py-2">{p.cantidad_stock}</td>
-                <td className="px-4 py-2">Bs {p.precio_unitario.toFixed(2)}</td>
+                <td className="px-4 py-2">
+                  Bs {Number(p.precio_unitario).toFixed(2)}
+                </td>
                 <td className="px-4 py-2 space-x-2">
                   <Link
                     to={`/productos/${p.id_producto}/editar`}
@@ -151,7 +156,11 @@ const ProductosPage = () => {
             <button
               key={n}
               onClick={() => setPaginaActual(n)}
-              className={`px-3 py-1 rounded ${n === paginaActual ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800"}`}
+              className={`px-3 py-1 rounded ${
+                n === paginaActual
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-200 text-gray-800"
+              }`}
             >
               {n}
             </button>

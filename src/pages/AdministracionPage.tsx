@@ -106,7 +106,7 @@ const AdministracionPage = () => {
   return (
     <div>
       <h2 className="text-2xl font-bold mb-4">Listado de Usuarios</h2>
-
+      <label className="block text-sm">Buscar Usuario</label>
       <input
         type="text"
         placeholder="Buscar por nombre, correo o rol..."

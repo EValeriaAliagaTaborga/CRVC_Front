@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getToken } from "../services/auth";
+import { getUsuario } from "../services/user";
+
+const usuario = getUsuario();
+const esAdministrador = usuario?.rol === "1";
 
 interface Cliente {
   id_cliente: number;
@@ -26,8 +30,8 @@ const ClientesPage = () => {
       try {
         const res = await axios.get("http://localhost:3000/api/clientes", {
           headers: {
-            Authorization: `Bearer ${getToken()}`
-          }
+            Authorization: `Bearer ${getToken()}`,
+          },
         });
         setClientes(res.data);
       } catch (error) {
@@ -43,7 +47,7 @@ const ClientesPage = () => {
 
     try {
       await axios.delete(`http://localhost:3000/api/clientes/${id}`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
+        headers: { Authorization: `Bearer ${getToken()}` },
       });
       setClientes(clientes.filter((c) => c.id_cliente !== id));
     } catch (error) {
@@ -51,9 +55,10 @@ const ClientesPage = () => {
     }
   };
 
-  const clientesFiltrados = clientes.filter((c) =>
-    c.nombre_empresa.toLowerCase().includes(filtroEmpresa.toLowerCase()) &&
-    c.nombre_contacto.toLowerCase().includes(filtroContacto.toLowerCase()) 
+  const clientesFiltrados = clientes.filter(
+    (c) =>
+      c.nombre_empresa.toLowerCase().includes(filtroEmpresa.toLowerCase()) &&
+      c.nombre_contacto.toLowerCase().includes(filtroContacto.toLowerCase())
   );
 
   const totalPaginas = Math.ceil(clientesFiltrados.length / clientesPorPagina);
@@ -80,24 +85,26 @@ const ClientesPage = () => {
           <label className="block text-sm">Empresa</label>
           <input
             type="text"
+            placeholder="Filtrar por Empresa"
             value={filtroEmpresa}
             onChange={(e) => {
               setFiltroEmpresa(e.target.value);
               setPaginaActual(1);
             }}
-            className="border p-2 rounded"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
           <label className="block text-sm">Contacto</label>
           <input
             type="text"
+            placeholder="Filtrar por Contacto"
             value={filtroContacto}
             onChange={(e) => {
               setFiltroContacto(e.target.value);
               setPaginaActual(1);
             }}
-            className="border p-2 rounded"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
       </div>
@@ -128,12 +135,14 @@ const ClientesPage = () => {
                   >
                     Editar
                   </button>
-                  <button
-                    onClick={() => handleDelete(cliente.id_cliente)}
-                    className="text-red-600 hover:underline"
-                  >
-                    Eliminar
-                  </button>
+                  {esAdministrador && (
+                    <button
+                      onClick={() => handleDelete(cliente.id_cliente)}
+                      className="text-red-600 hover:underline"
+                    >
+                      Eliminar
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -155,7 +164,11 @@ const ClientesPage = () => {
             <button
               key={n}
               onClick={() => setPaginaActual(n)}
-              className={`px-3 py-1 rounded ${n === paginaActual ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800"}`}
+              className={`px-3 py-1 rounded ${
+                n === paginaActual
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-200 text-gray-800"
+              }`}
             >
               {n}
             </button>

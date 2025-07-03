@@ -58,7 +58,7 @@ const HomePage = () => {
 
   const handleLogout = () => {
     removeToken();
-    navigate("/");
+    navigate("/login");
   };
 
   if (!usuario) return <p>Cargando...</p>;
@@ -67,7 +67,7 @@ const HomePage = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-xl font-semibold">
-          Bienvenido {usuario.nombre} ({usuario.rol})
+          Bienvenido {usuario.nombre}
         </h1>
         <button onClick={handleLogout} className="bg-red-500 text-white px-3 py-1 rounded">
           Cerrar sesión
@@ -75,6 +75,7 @@ const HomePage = () => {
       </div>
 
       {/* Filtro */}
+      <label className="block text-sm">Buscar Logs</label>
       <input
         type="text"
         placeholder="Buscar por nombre de usuario"

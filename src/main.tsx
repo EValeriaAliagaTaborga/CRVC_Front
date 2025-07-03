@@ -36,7 +36,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <ErrorBoundary>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<LoginPage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
           <Route
             path="/home"

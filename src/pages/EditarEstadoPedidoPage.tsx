@@ -3,12 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { getToken } from "../services/auth";
 
-const estados = [
-  "En progreso",
-  "Listo para entrega",
-  "Entregado",
-  "Cancelado"
-];
+const estados = ["En progreso", "Listo para entrega", "Entregado", "Cancelado"];
 
 const EditarEstadoPedidoPage = () => {
   const { id } = useParams();
@@ -20,7 +15,7 @@ const EditarEstadoPedidoPage = () => {
     const fetchPedido = async () => {
       try {
         const res = await axios.get(`http://localhost:3000/api/pedidos`, {
-          headers: { Authorization: `Bearer ${getToken()}` }
+          headers: { Authorization: `Bearer ${getToken()}` },
         });
 
         const pedido = res.data.find((p: any) => p.id_pedido === Number(id));
@@ -41,7 +36,7 @@ const EditarEstadoPedidoPage = () => {
         `http://localhost:3000/api/pedidos/${id}/estado`,
         { estado_pedido: estado },
         {
-          headers: { Authorization: `Bearer ${getToken()}` }
+          headers: { Authorization: `Bearer ${getToken()}` },
         }
       );
       navigate("/pedidos");
@@ -56,13 +51,16 @@ const EditarEstadoPedidoPage = () => {
     <div>
       <h2 className="text-2xl font-bold mb-4">Actualizar estado del pedido</h2>
 
-      <form onSubmit={handleSubmit} className="bg-white p-6 rounded shadow-md w-full max-w-md space-y-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white p-6 rounded shadow-md w-full max-w-md space-y-4"
+      >
         <div>
           <label className="block font-medium mb-1">Estado actual</label>
           <select
             value={estado}
             onChange={(e) => setEstado(e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {estados.map((e) => (
               <option key={e} value={e}>

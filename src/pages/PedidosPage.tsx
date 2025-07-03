@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { getToken } from "../services/auth";
+import { getUsuario } from "../services/user";
+
+const usuario = getUsuario();
+const esAdministrador = usuario?.rol === "1";
 
 interface DetallePedido {
   id_detalle_pedido: number;
@@ -100,44 +104,59 @@ const PedidosPage = () => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <input
+        <div>
+          <label className="block text-sm">Cliente</label>
+          <input
           type="text"
           name="cliente"
           placeholder="Filtrar por cliente"
           value={filtros.cliente}
           onChange={handleFiltroChange}
-          className="p-2 border rounded"
+          className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <input
+        </div>
+        <div>
+          <label className="block text-sm">Construcción</label>
+          <input
           type="text"
           name="direccion"
           placeholder="Filtrar por construcción"
           value={filtros.direccion}
           onChange={handleFiltroChange}
-          className="p-2 border rounded"
+          className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <input
+        </div>
+        <div>
+          <label className="block text-sm">Estado</label>
+          <input
           type="text"
           name="estado"
           placeholder="Filtrar por estado"
           value={filtros.estado}
           onChange={handleFiltroChange}
-          className="p-2 border rounded"
+          className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <input
+        </div>
+        <div>
+          <label className="block text-sm">Fecha de Inicio</label>
+          <input
           type="date"
           name="fechaInicio"
           value={filtros.fechaInicio}
           onChange={handleFiltroChange}
-          className="p-2 border rounded"
+          className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <input
+        </div>
+        <div>
+          <label className="block text-sm">Fecha de Finalización</label>
+          <input
           type="date"
           name="fechaFin"
           value={filtros.fechaFin}
           onChange={handleFiltroChange}
-          className="p-2 border rounded"
+          className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        </div>
       </div>
 
       <div className="bg-white shadow-md rounded overflow-x-auto">
@@ -177,12 +196,14 @@ const PedidosPage = () => {
                   )}
                 </td>
                 <td className="px-4 py-2 space-y-2">
+                  {esAdministrador && (
                   <button
                     onClick={() => handleEliminar(p.id_pedido)}
                     className="text-red-600 hover:underline text-sm block"
                   >
                     Eliminar
                   </button>
+                  )}
                   <Link
                     to={`/pedidos/${p.id_pedido}/estado`}
                     className="text-blue-600 hover:underline text-sm block"

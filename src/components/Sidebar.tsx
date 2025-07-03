@@ -9,7 +9,7 @@ const Sidebar = () => {
 
   const handleLogout = () => {
     removeToken();
-    navigate("/");
+    navigate("/login");
   };
 
   return (

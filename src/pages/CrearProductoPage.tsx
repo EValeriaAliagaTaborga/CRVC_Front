@@ -65,7 +65,7 @@ const CrearProductoPage = () => {
             name="id_producto"
             value={form.id_producto}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
@@ -76,7 +76,7 @@ const CrearProductoPage = () => {
             name="nombre_producto"
             value={form.nombre_producto}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
@@ -88,7 +88,7 @@ const CrearProductoPage = () => {
             value={form.tipo}
             onChange={handleChange}
             placeholder="Ej. Primera, Segunda..."
-            className="w-full p-2 border rounded"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
@@ -99,7 +99,7 @@ const CrearProductoPage = () => {
             name="cantidad_stock"
             value={form.cantidad_stock}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             min={0}
           />
         </div>
@@ -111,7 +111,7 @@ const CrearProductoPage = () => {
             name="precio_unitario"
             value={form.precio_unitario}
             onChange={handleChange}
-            className="w-full p-2 border rounded"
+            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             min={0}
             step={0.01}
           />
