@@ -29,9 +29,14 @@ const CrearPedidoPage = () => {
   const [form, setForm] = useState({
     id_construccion: "",
     estado_pedido: "En progreso",
-    precio_pedido: 0,
     descuento_pedido: 0,
+    tipo_descuento: "porcentaje" as
+      | "porcentaje"
+      | "monto_total"
+      | "monto_por_unidad",
+    detalles: [ ]
   });
+
   const [detalles, setDetalles] = useState<DetallePedido[]>([]);
 
   const navigate = useNavigate();
@@ -111,7 +116,23 @@ const CrearPedidoPage = () => {
 
   // Calcular el precio total del pedido
   const calcularPrecioTotal = () => {
-    return detalles.reduce((total, item) => total + item.precio_total, 0);
+    const baseTotal = detalles.reduce((sum, d) => sum + d.precio_total, 0);
+    const totalUnidades = detalles.reduce(
+      (sum, d) => sum + d.cantidad_pedida,
+      0
+    );
+    const disc = form.descuento_pedido;
+
+    switch (form.tipo_descuento) {
+      case "porcentaje":
+        return baseTotal * (1 - disc / 100);
+      case "monto_total":
+        return Math.max(0, baseTotal - disc);
+      case "monto_por_unidad":
+        return Math.max(0, baseTotal - disc * totalUnidades);
+      default:
+        return baseTotal;
+    }
   };
 
   // Enviar el pedido
@@ -149,6 +170,7 @@ const CrearPedidoPage = () => {
           estado_pedido: form.estado_pedido,
           precio_pedido: calcularPrecioTotal(),
           descuento_pedido: Number(form.descuento_pedido),
+          tipo_descuento: form.tipo_descuento,
           detalles,
         },
         {
@@ -223,6 +245,7 @@ const CrearPedidoPage = () => {
                   );
                 }}
                 className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
               />
 
               <input
@@ -235,6 +258,7 @@ const CrearPedidoPage = () => {
                     e.target.value
                   )
                 }
+                required
                 className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
 
@@ -262,18 +286,61 @@ const CrearPedidoPage = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block font-medium">Descuento (%)</label>
-            <input
-              type="number"
-              name="descuento_pedido"
-              value={form.descuento_pedido}
-              onChange={handleChange}
-              className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              min={0}
-              max={100}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Tipo de descuento */}
+            <div>
+              <label className="block font-medium">Tipo de descuento</label>
+              <select
+                name="tipo_descuento"
+                value={form.tipo_descuento}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    tipo_descuento: e.target.value as any,
+                    // opcional: reset valor al cambiar tipo
+                    descuento_pedido: 0,
+                  })
+                }
+                className="w-full border p-2 rounded"
+              >
+                <option value="porcentaje">Porcentaje (%)</option>
+                <option value="monto_total">Monto fijo total</option>
+                <option value="monto_por_unidad">Monto por unidad</option>
+              </select>
+            </div>
+            {/* Valor del descuento */}
+            <div>
+              <label className="block font-medium">
+                {form.tipo_descuento === "porcentaje"
+                  ? "Descuento (%)"
+                  : form.tipo_descuento === "monto_total"
+                  ? "Descuento total (Bs)"
+                  : "Descuento por unidad (Bs)"}
+              </label>
+              <input
+                type="number"
+                name="descuento_pedido"
+                value={form.descuento_pedido}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    descuento_pedido: parseFloat(e.target.value),
+                  })
+                }
+                min={0}
+                step="0.01"
+                max={form.tipo_descuento === "porcentaje" ? 100 : undefined}
+                className="w-full border p-2 rounded"
+              />
+            </div>
+            {/* Total calculado */}
+            <div className="flex flex-col justify-end">
+              <p className="text-right text-lg font-bold">
+                Total: Bs {calcularPrecioTotal().toFixed(2)}
+              </p>
+            </div>
           </div>
+
           <div>
             <label className="block font-medium">Estado del pedido</label>
             <select
