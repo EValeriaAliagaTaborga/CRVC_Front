@@ -13,7 +13,7 @@ import CrearConstruccionPage from "./pages/CrearConstruccionPage";
 import EditarConstruccionPage from "./pages/EditarConstruccionPage";
 import PedidosPage from "./pages/PedidosPage";
 import CrearPedidoPage from "./pages/CrearPedidoPage";
-import EditarEstadoPedidoPage from "./pages/EditarEstadoPedidoPage";
+import EditarDetallePedidoPage from "./pages/EditarDetallePedidoPage";
 import ProductosPage from "./pages/ProductosPage";
 import CrearProductoPage from "./pages/CrearProductoPage";
 import EditarProductoPage from "./pages/EditarProductoPage";
@@ -129,11 +129,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             }
           />
           <Route
-            path="/pedidos/:id/estado"
+            path="/pedidos/:pedidoId/detalles/:detalleId"
             element={
               <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
                 <DashboardLayout>
-                  <EditarEstadoPedidoPage />
+                  <EditarDetallePedidoPage />
                 </DashboardLayout>
               </PrivateRoute>
             }

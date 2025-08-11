@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+// src/pages/PedidosPage.tsx
+import { useEffect, useState, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getToken } from "../services/auth";
 import { getUsuario } from "../services/user";
+import { differenceInCalendarDays, parseISO } from "date-fns";
 
 const usuario = getUsuario();
 const esAdministrador = usuario?.rol === "1";
@@ -29,89 +31,197 @@ interface Pedido {
   detalles: DetallePedido[];
 }
 
-const PedidosPage = () => {
+// Un row “plano” para la tabla
+interface Row {
+  pedidoId: number;
+  detalleId: number;
+  producto: string;
+  cantidad: number;
+  fecha: string;
+  entregado: boolean;
+}
+
+type SortDirection = "asc" | "desc";
+
+interface CategoryTableProps {
+  label: string;
+  rows: Row[];
+  onToggleEntrega: (pedidoId: number, detalleId: number, nuevoValor: boolean) => void;
+  onEliminar: (pedidoId: number) => void;
+}
+
+const CategoryTable = ({
+  label,
+  rows,
+  onToggleEntrega,
+  onEliminar,
+}: CategoryTableProps) => {
+  const ITEMS_PER_PAGE = 20;
+
+  const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<keyof Row>("pedidoId");
+  const [sortDir, setSortDir] = useState<SortDirection>("asc");
+
+  // Ordenar
+  const sorted = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const v1 = a[sortKey], v2 = b[sortKey];
+      if (typeof v1 === "number" && typeof v2 === "number") {
+        return sortDir === "asc" ? v1 - v2 : v2 - v1;
+      }
+      if (typeof v1 === "boolean" && typeof v2 === "boolean") {
+        return sortDir === "asc"
+          ? Number(v1) - Number(v2)
+          : Number(v2) - Number(v1);
+      }
+      const s1 = String(v1), s2 = String(v2);
+      return sortDir === "asc" ? s1.localeCompare(s2) : s2.localeCompare(s1);
+    });
+  }, [rows, sortKey, sortDir]);
+
+  const totalPages = Math.ceil(sorted.length / ITEMS_PER_PAGE);
+  const pageRows = sorted.slice(
+    (page - 1) * ITEMS_PER_PAGE,
+    page * ITEMS_PER_PAGE
+  );
+
+  const onSort = (key: keyof Row) => {
+    if (key === sortKey) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-xl font-semibold">{label}</h3>
+      {rows.length === 0 ? (
+        <p className="text-gray-500">— ningún pedido —</p>
+      ) : (
+        <div className="overflow-x-auto bg-white shadow rounded">
+          <table className="min-w-full text-sm table-auto">
+            <thead className="bg-gray-100">
+              <tr>
+                {[
+                  { label: "#Pedido", key: "pedidoId" as const },
+                  { label: "Producto", key: "producto" as const },
+                  { label: "Cant.", key: "cantidad" as const },
+                  { label: "Entrega", key: "fecha" as const },
+                  { label: "Entregado", key: "entregado" as const },
+                ].map((col) => (
+                  <th
+                    key={col.key}
+                    className="px-4 py-2 cursor-pointer select-none"
+                    onClick={() => onSort(col.key)}
+                  >
+                    {col.label}
+                    {sortKey === col.key && (
+                      <span>{sortDir === "asc" ? " ▲" : " ▼"}</span>
+                    )}
+                  </th>
+                ))}
+                <th className="px-4 py-2">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((r) => (
+                <tr key={r.detalleId} className="border-t">
+                  <td className="px-4 py-2">{r.pedidoId}</td>
+                  <td className="px-4 py-2">{r.producto}</td>
+                  <td className="px-4 py-2">{r.cantidad}</td>
+                  <td className="px-4 py-2">
+                    {new Date(r.fecha).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={r.entregado}
+                      disabled={!esAdministrador}
+                      onChange={() =>
+                        onToggleEntrega(
+                          r.pedidoId,
+                          r.detalleId,
+                          !r.entregado
+                        )
+                      }
+                    />
+                  </td>
+                  <td className="px-4 py-2 space-y-1">
+                    {esAdministrador && (
+                      <button
+                        onClick={() => onEliminar(r.pedidoId)}
+                        className="text-red-600 hover:underline text-sm block"
+                      >
+                        Eliminar
+                      </button>
+                    )}
+                    <Link
+                      to={`/pedidos/${r.pedidoId}/detalles/${r.detalleId}`}
+                      className="text-blue-600 hover:underline text-sm block"
+                    >
+                      Cambiar estado
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="flex justify-center items-center gap-2 p-4">
+            <button
+              onClick={() => setPage((p) => Math.max(p - 1, 1))}
+              disabled={page === 1}
+              className="px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200"
+            >
+              ◀
+            </button>
+            <span className="text-sm">
+              {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+              disabled={page === totalPages}
+              className="px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};
+
+export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
-  const [filtros, setFiltros] = useState({
-    cliente: "",
-    direccion: "",
-    estado: "",
-    fechaInicio: "",
-    fechaFin: "",
-  });
+  const navigate = useNavigate();
 
-  const [pagina, setPagina] = useState(1);
-  const porPagina = 15;
-
-  useEffect(() => {
-    const fetchPedidos = async () => {
-      try {
-        const res = await axios.get("http://localhost:3000/api/pedidos", {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        });
-        console.log("📦 Pedidos recibidos del API:", res.data);
-        res.data.forEach((p: any) =>
-          console.log(`→ Pedido ${p.id_pedido} → detalles=`, p.detalles)
-        );
-        setPedidos(res.data);
-      } catch (error) {
-        console.error("Error al obtener pedidos", error);
-      }
-    };
-
-    fetchPedidos();
-  }, []);
-
+  // Mueve estos handlers aquí y pásalos a cada CategoryTable
   const handleEliminar = async (id: number) => {
-    if (window.confirm("¿Estás seguro de eliminar este pedido?")) {
-      try {
-        await axios.delete(`http://localhost:3000/api/pedidos/${id}`, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        });
-        setPedidos(pedidos.filter((p) => p.id_pedido !== id));
-      } catch (error) {
-        alert("Error al eliminar pedido");
-      }
+    if (!window.confirm("¿Seguro de eliminar este pedido?")) return;
+    try {
+      await axios.delete(`http://localhost:3000/api/pedidos/${id}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      setPedidos((p) => p.filter((x) => x.id_pedido !== id));
+    } catch {
+      alert("Error al eliminar pedido");
     }
   };
 
-  const pedidosFiltrados = pedidos.filter((p) => {
-    const fecha = new Date(p.fecha_creacion_pedido);
-    const inicio = filtros.fechaInicio ? new Date(filtros.fechaInicio) : null;
-    const fin = filtros.fechaFin ? new Date(filtros.fechaFin) : null;
-
-    return (
-      p.cliente.toLowerCase().includes(filtros.cliente.toLowerCase()) &&
-      p.direccion.toLowerCase().includes(filtros.direccion.toLowerCase()) &&
-      p.estado_pedido.toLowerCase().includes(filtros.estado.toLowerCase()) &&
-      (!inicio || fecha >= inicio) &&
-      (!fin || fecha <= fin)
-    );
-  });
-
-  const totalPaginas = Math.ceil(pedidosFiltrados.length / porPagina);
-  const pedidosPagina = pedidosFiltrados.slice(
-    (pagina - 1) * porPagina,
-    pagina * porPagina
-  );
-
-  const handleFiltroChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFiltros({ ...filtros, [e.target.name]: e.target.value });
-    setPagina(1);
-  };
-
-  // dentro del componente
   const toggleEntrega = async (
     pedidoId: number,
     detalleId: number,
     nuevoValor: boolean
   ) => {
     try {
-      await axios.put(
+      await axios.patch(
         `http://localhost:3000/api/pedidos/${pedidoId}/detalle/${detalleId}/entrega`,
         { entregado: nuevoValor },
         { headers: { Authorization: `Bearer ${getToken()}` } }
       );
-      // Actualizar estado local
       setPedidos((prev) =>
         prev.map((p) =>
           p.id_pedido === pedidoId
@@ -126,15 +236,53 @@ const PedidosPage = () => {
             : p
         )
       );
-    } catch (err) {
-      console.error("Error togglear entrega", err);
-      alert("No se pudo actualizar el estado de entrega.");
+    } catch {
+      alert("No se pudo actualizar la entrega");
     }
   };
 
+  useEffect(() => {
+    axios
+      .get("http://localhost:3000/api/pedidos", {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      .then((res) => setPedidos(res.data))
+      .catch(console.error);
+  }, []);
+
+  // Reconstruye filas para cada categoría
+  const buildRows = (filterFn: (d: DetallePedido) => boolean): Row[] =>
+    pedidos.flatMap((p) =>
+      p.detalles.filter(filterFn).map((d) => ({
+        pedidoId: p.id_pedido,
+        detalleId: d.id_detalle_pedido,
+        producto: `${d.nombre_producto} (${d.tipo})`,
+        cantidad: d.cantidad_pedida,
+        fecha: d.fecha_estimada_entrega,
+        entregado: d.entregado,
+      }))
+    );
+
+  const categorias = useMemo(
+    () => [
+      { label: "Pendientes", rows: buildRows((d) => !d.entregado) },
+      {
+        label: "Vencidos",
+        rows: buildRows(
+          (d) =>
+            differenceInCalendarDays(parseISO(d.fecha_estimada_entrega), new Date()) < 0 &&
+            !d.entregado
+        ),
+      },
+      // … mismas categorías de “Hoy”, “1 día”, “3 días”…
+      { label: "Completados", rows: buildRows((d) => d.entregado) },
+    ],
+    [pedidos]
+  );
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-8 p-6">
+      <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Pedidos registrados</h2>
         <Link
           to="/pedidos/crear"
@@ -144,179 +292,15 @@ const PedidosPage = () => {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div>
-          <label className="block text-sm">Cliente</label>
-          <input
-            type="text"
-            name="cliente"
-            placeholder="Filtrar por cliente"
-            value={filtros.cliente}
-            onChange={handleFiltroChange}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm">Construcción</label>
-          <input
-            type="text"
-            name="direccion"
-            placeholder="Filtrar por construcción"
-            value={filtros.direccion}
-            onChange={handleFiltroChange}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm">Estado</label>
-          <input
-            type="text"
-            name="estado"
-            placeholder="Filtrar por estado"
-            value={filtros.estado}
-            onChange={handleFiltroChange}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm">Fecha de Inicio</label>
-          <input
-            type="date"
-            name="fechaInicio"
-            value={filtros.fechaInicio}
-            onChange={handleFiltroChange}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm">Fecha de Finalización</label>
-          <input
-            type="date"
-            name="fechaFin"
-            value={filtros.fechaFin}
-            onChange={handleFiltroChange}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      </div>
-
-      <div className="bg-white shadow-md rounded overflow-x-auto">
-        <table className="min-w-full text-sm table-auto">
-          <thead className="bg-gray-200">
-            <tr>
-              <th className="px-4 py-2">Cliente</th>
-              <th className="px-4 py-2">Construcción</th>
-              <th className="px-4 py-2">Fecha</th>
-              <th className="px-4 py-2">Precio</th>
-              <th className="px-4 py-2">Descuento</th>
-              <th className="px-4 py-2">Estado</th>
-              <th className="px-4 py-2">Productos</th>
-              <th className="px-4 py-2">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pedidosPagina.map((p) => (
-              <tr key={p.id_pedido} className="border-t align-top">
-                <td className="px-4 py-2">{p.cliente}</td>
-                <td className="px-4 py-2">{p.direccion}</td>
-                <td className="px-4 py-2">
-                  {new Date(p.fecha_creacion_pedido).toLocaleDateString()}
-                </td>
-                <td className="px-4 py-2">
-                  Bs {parseFloat(p.precio_pedido).toFixed(2)}
-                </td>
-                <td className="px-4 py-2">{p.descuento_pedido}%</td>
-                <td className="px-4 py-2">{p.estado_pedido}</td>
-                <td className="px-4 py-2">
-                  {Array.isArray(p.detalles) && p.detalles.length > 0 ? (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr>
-                          <th className="border px-2">Producto</th>
-                          <th className="border px-2">Cant.</th>
-                          <th className="border px-2">Entrega</th>
-                          <th className="border px-2">¿Entregado?</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {p.detalles.map((d) => (
-                          <tr key={d.id_detalle_pedido}>
-                            <td className="border px-2">
-                              {d.nombre_producto} ({d.tipo})
-                            </td>
-                            <td className="border px-2">{d.cantidad_pedida}</td>
-                            <td className="border px-2">
-                              {new Date(
-                                d.fecha_estimada_entrega
-                              ).toLocaleDateString()}
-                            </td>
-                            <td className="border px-2 text-center">
-                              <input
-                                type="checkbox"
-                                checked={d.entregado}
-                                disabled={!esAdministrador} // sólo Admin/Vendedor
-                                onChange={(e) =>
-                                  toggleEntrega(
-                                    p.id_pedido,
-                                    d.id_detalle_pedido,
-                                    e.target.checked
-                                  )
-                                }
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <span className="text-gray-400">Sin productos</span>
-                  )}
-                </td>
-
-                <td className="px-4 py-2 space-y-2">
-                  {esAdministrador && (
-                    <button
-                      onClick={() => handleEliminar(p.id_pedido)}
-                      className="text-red-600 hover:underline text-sm block"
-                    >
-                      Eliminar
-                    </button>
-                  )}
-                  <Link
-                    to={`/pedidos/${p.id_pedido}/estado`}
-                    className="text-blue-600 hover:underline text-sm block"
-                  >
-                    Cambiar estado
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* PAGINACIÓN */}
-      <div className="flex justify-center items-center mt-4 gap-4">
-        <button
-          onClick={() => setPagina((p) => Math.max(p - 1, 1))}
-          disabled={pagina === 1}
-          className="px-4 py-2 border rounded bg-gray-100 hover:bg-gray-200"
-        >
-          Anterior
-        </button>
-        <span className="font-medium">
-          Página {pagina} de {totalPaginas}
-        </span>
-        <button
-          onClick={() => setPagina((p) => Math.min(p + 1, totalPaginas))}
-          disabled={pagina === totalPaginas}
-          className="px-4 py-2 border rounded bg-gray-100 hover:bg-gray-200"
-        >
-          Siguiente
-        </button>
-      </div>
+      {categorias.map((cat) => (
+        <CategoryTable
+          key={cat.label}
+          label={cat.label}
+          rows={cat.rows}
+          onToggleEntrega={toggleEntrega}
+          onEliminar={handleEliminar}
+        />
+      ))}
     </div>
   );
-};
-
-export default PedidosPage;
+}

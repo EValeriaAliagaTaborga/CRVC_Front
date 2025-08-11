@@ -13,6 +13,7 @@ interface Producto {
   id_producto: string;
   nombre_producto: string;
   precio_unitario: number;
+  cantidad_stock : number;
   tipo: string;
 }
 
@@ -34,7 +35,7 @@ const CrearPedidoPage = () => {
       | "porcentaje"
       | "monto_total"
       | "monto_por_unidad",
-    detalles: [ ]
+    detalles: [],
   });
 
   const [detalles, setDetalles] = useState<DetallePedido[]>([]);
@@ -231,7 +232,17 @@ const CrearPedidoPage = () => {
                   </option>
                 ))}
               </select>
-
+              {detalle.id_producto &&
+                (() => {
+                  const prod = productos.find(
+                    (p) => p.id_producto === detalle.id_producto
+                  );
+                  return (
+                    <p className="text-xs text-gray-500">
+                      Stock disponible: {prod?.cantidad_stock ?? 0} uds.
+                    </p>
+                  );
+                })()}
               <input
                 type="number"
                 placeholder="Cantidad"
