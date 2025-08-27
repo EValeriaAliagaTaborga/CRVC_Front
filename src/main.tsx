@@ -25,6 +25,8 @@ import AdministracionPage from "./pages/AdministracionPage";
 import EditarUsuarioPage from "./pages/EditarUsuarioPage";
 import DashboardLayout from "./layouts/DashboardLayout";
 import MetricasPage from "./pages/MetricasPage";
+import RecuperarContrasenaPage from "./pages/RecuperarContrasenaPage";
+import RestablecerContrasenaPage from "./pages/RestablecerContrasenaPage";
 
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./index.css";
@@ -37,6 +39,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/recuperar" element={<RecuperarContrasenaPage/>} />
+          <Route path="/restablecer" element={<RestablecerContrasenaPage/>} />
           <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
           <Route
             path="/home"
