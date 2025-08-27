@@ -13,8 +13,8 @@ interface Producto {
   id_producto: string;
   nombre_producto: string;
   precio_unitario: number;
-  cantidad_stock : number;
-  tipo: string;
+  cantidad_stock: number;
+  tipo: "Primera" | "Segunda" | "Tercera" | string;
 }
 
 interface DetallePedido {
@@ -24,6 +24,14 @@ interface DetallePedido {
   precio_total: number;
 }
 
+type ModalError =
+  | null
+  | {
+      title: string;
+      message?: string;
+      items?: string[]; // para listar violaciones por producto
+    };
+
 const CrearPedidoPage = () => {
   const [construcciones, setConstrucciones] = useState<Construccion[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -31,18 +39,13 @@ const CrearPedidoPage = () => {
     id_construccion: "",
     estado_pedido: "En progreso",
     descuento_pedido: 0,
-    tipo_descuento: "porcentaje" as
-      | "porcentaje"
-      | "monto_total"
-      | "monto_por_unidad",
-    detalles: [],
+    tipo_descuento: "porcentaje" as "porcentaje" | "monto_total" | "monto_por_unidad",
   });
 
   const [detalles, setDetalles] = useState<DetallePedido[]>([]);
-
+  const [modalError, setModalError] = useState<ModalError>(null);
   const navigate = useNavigate();
 
-  // Fetch construcciones y productos
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -56,24 +59,23 @@ const CrearPedidoPage = () => {
         ]);
         setConstrucciones(resConstrucciones.data);
         setProductos(resProductos.data);
-      } catch (error) {
-        alert("Error al cargar datos del servidor");
+      } catch {
+        setModalError({
+          title: "No se pudo cargar la información",
+          message: "Ocurrió un error consultando construcciones y/o productos. Intenta nuevamente.",
+        });
       }
     };
     fetchData();
   }, []);
 
-  // Manejo de cambios del formulario general
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // Agregar un producto al pedido
   const agregarDetalle = () => {
-    setDetalles([
-      ...detalles,
+    setDetalles((prev) => [
+      ...prev,
       {
         id_producto: "",
         cantidad_pedida: 0,
@@ -83,50 +85,37 @@ const CrearPedidoPage = () => {
     ]);
   };
 
-  // Manejar cambio en un detalle específico
   const handleDetalleChange = <K extends keyof DetallePedido>(
     index: number,
     field: K,
     value: DetallePedido[K]
   ) => {
-    const nuevosDetalles = [...detalles];
-    nuevosDetalles[index] = {
-      ...nuevosDetalles[index],
-      [field]: value,
-    };
+    const nuevos = [...detalles];
+    nuevos[index] = { ...nuevos[index], [field]: value };
 
     if (field === "id_producto" || field === "cantidad_pedida") {
-      const producto = productos.find(
-        (p) => p.id_producto === nuevosDetalles[index].id_producto
-      );
-      const cantidad = Number(nuevosDetalles[index].cantidad_pedida);
-      nuevosDetalles[index].precio_total = producto
-        ? producto.precio_unitario * cantidad
-        : 0;
+      const producto = productos.find((p) => p.id_producto === nuevos[index].id_producto);
+      const cantidad = Number(nuevos[index].cantidad_pedida);
+      nuevos[index].precio_total = producto ? producto.precio_unitario * cantidad : 0;
     }
 
-    setDetalles(nuevosDetalles);
+    setDetalles(nuevos);
   };
 
-  // Eliminar producto del pedido
   const eliminarDetalle = (index: number) => {
-    const nuevosDetalles = [...detalles];
-    nuevosDetalles.splice(index, 1);
-    setDetalles(nuevosDetalles);
+    const nuevos = [...detalles];
+    nuevos.splice(index, 1);
+    setDetalles(nuevos);
   };
 
-  // Calcular el precio total del pedido
   const calcularPrecioTotal = () => {
     const baseTotal = detalles.reduce((sum, d) => sum + d.precio_total, 0);
-    const totalUnidades = detalles.reduce(
-      (sum, d) => sum + d.cantidad_pedida,
-      0
-    );
-    const disc = form.descuento_pedido;
+    const totalUnidades = detalles.reduce((sum, d) => sum + d.cantidad_pedida, 0);
+    const disc = Number(form.descuento_pedido) || 0;
 
     switch (form.tipo_descuento) {
       case "porcentaje":
-        return baseTotal * (1 - disc / 100);
+        return Math.max(0, baseTotal * (1 - disc / 100));
       case "monto_total":
         return Math.max(0, baseTotal - disc);
       case "monto_por_unidad":
@@ -136,32 +125,54 @@ const CrearPedidoPage = () => {
     }
   };
 
-  // Enviar el pedido
+  // ---------- SUBMIT con popup de errores ----------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!form.id_construccion || detalles.length === 0) {
-      alert(
-        "Debes seleccionar una construcción y agregar al menos un producto."
-      );
+      setModalError({
+        title: "Datos incompletos",
+        message: "Debes seleccionar una construcción y agregar al menos un producto.",
+      });
       return;
     }
 
     const camposInvalidos = detalles.some(
-      (detalle) =>
-        !detalle.id_producto ||
-        detalle.cantidad_pedida <= 0 ||
-        !detalle.fecha_estimada_entrega
+      (d) => !d.id_producto || d.cantidad_pedida <= 0 || !d.fecha_estimada_entrega
     );
-
     if (camposInvalidos) {
-      alert(
-        "Todos los productos deben tener valores válidos (producto, cantidad, fecha estimada)."
-      );
+      setModalError({
+        title: "Valores inválidos",
+        message: "Cada producto debe tener valores válidos (producto, cantidad, fecha estimada).",
+      });
       return;
     }
 
-    console.log("➡️ Detalles enviados:", detalles);
+    // --- Pre-chequeo local: Segunda/Tercera no pueden exceder stock ---
+    const sumPorProducto: Record<string, number> = {};
+    for (const d of detalles) {
+      sumPorProducto[d.id_producto] = (sumPorProducto[d.id_producto] || 0) + Number(d.cantidad_pedida || 0);
+    }
+
+    const violaciones: string[] = [];
+    for (const id of Object.keys(sumPorProducto)) {
+      const p = productos.find((pp) => pp.id_producto === id);
+      if (!p) continue;
+      const solicitado = sumPorProducto[id];
+      const stock = Number(p.cantidad_stock || 0);
+      if ((p.tipo === "Segunda" || p.tipo === "Tercera") && solicitado > stock) {
+        violaciones.push(`${p.nombre_producto} (${p.tipo}): solicitado ${solicitado} > stock ${stock}`);
+      }
+    }
+
+    if (violaciones.length > 0) {
+      setModalError({
+        title: "No se puede crear el pedido",
+        message: "Los siguientes productos de Segunda/Tercera exceden el stock disponible:",
+        items: violaciones,
+      });
+      return;
+    }
 
     try {
       await axios.post(
@@ -174,13 +185,27 @@ const CrearPedidoPage = () => {
           tipo_descuento: form.tipo_descuento,
           detalles,
         },
-        {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        }
+        { headers: { Authorization: `Bearer ${getToken()}` } }
       );
       navigate("/pedidos");
-    } catch (error) {
-      alert("Error al registrar el pedido");
+    } catch (error: any) {
+      const msg: string | undefined = error?.response?.data?.message;
+      const det: any[] | undefined = error?.response?.data?.detalles;
+
+      if (msg && Array.isArray(det) && det.length) {
+        setModalError({
+          title: "No se puede crear el pedido",
+          message: msg,
+          items: det.map(
+            (x: any) => `${x.id_producto} (${x.tipo}): solicitado ${x.solicitado} > stock ${x.stock}`
+          ),
+        });
+      } else {
+        setModalError({
+          title: "Error al registrar el pedido",
+          message: msg || "Ocurrió un problema procesando la solicitud.",
+        });
+      }
     }
   };
 
@@ -188,14 +213,9 @@ const CrearPedidoPage = () => {
     <div>
       <h2 className="text-2xl font-bold mb-4">Registrar nuevo pedido</h2>
 
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-6 rounded shadow-md space-y-6 max-w-4xl"
-      >
+      <form onSubmit={handleSubmit} className="bg-white p-6 rounded shadow-md space-y-6 max-w-4xl">
         <div>
-          <label className="block font-medium">
-            Construcción (nombre_empresa)
-          </label>
+          <label className="block font-medium">Construcción (nombre_empresa)</label>
           <select
             name="id_construccion"
             value={form.id_construccion}
@@ -214,69 +234,58 @@ const CrearPedidoPage = () => {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Productos del pedido</h3>
           {detalles.map((detalle, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end"
-            >
-              <select
-                value={detalle.id_producto}
-                onChange={(e) =>
-                  handleDetalleChange(index, "id_producto", e.target.value)
-                }
-                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Seleccione producto</option>
-                {productos.map((p) => (
-                  <option key={p.id_producto} value={p.id_producto}>
-                    {p.nombre_producto} - {p.tipo}
-                  </option>
-                ))}
-              </select>
-              {detalle.id_producto &&
-                (() => {
-                  const prod = productos.find(
-                    (p) => p.id_producto === detalle.id_producto
-                  );
-                  return (
-                    <p className="text-xs text-gray-500">
-                      Stock disponible: {prod?.cantidad_stock ?? 0} uds.
-                    </p>
-                  );
-                })()}
+            <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <div>
+                <label className="block font-medium">Producto</label>
+                <select
+                  value={detalle.id_producto}
+                  onChange={(e) => handleDetalleChange(index, "id_producto", e.target.value)}
+                  className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccione producto</option>
+                  {productos.map((p) => (
+                    <option key={p.id_producto} value={p.id_producto}>
+                      {p.nombre_producto} - {p.tipo}
+                    </option>
+                  ))}
+                </select>
+                {detalle.id_producto &&
+                  (() => {
+                    const prod = productos.find((p) => p.id_producto === detalle.id_producto);
+                    return (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Stock disponible: {prod?.cantidad_stock ?? 0} uds.
+                      </p>
+                    );
+                  })()}
+              </div>
+              <div>
+                <label className="block font-medium">Cantidad</label>
               <input
                 type="number"
                 placeholder="Cantidad"
                 value={detalle.cantidad_pedida}
                 onChange={(e) => {
                   const value = parseInt(e.target.value);
-                  handleDetalleChange(
-                    index,
-                    "cantidad_pedida",
-                    isNaN(value) ? 0 : value
-                  );
+                  handleDetalleChange(index, "cantidad_pedida", isNaN(value) ? 0 : value);
                 }}
                 className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
-
-              <input
-                type="date"
-                value={detalle.fecha_estimada_entrega}
-                onChange={(e) =>
-                  handleDetalleChange(
-                    index,
-                    "fecha_estimada_entrega",
-                    e.target.value
-                  )
-                }
-                required
-                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              </div>
+              <div>
+                <label className="block font-medium">Fecha estimada de entrega</label>
+                <input
+                  type="date"
+                  value={detalle.fecha_estimada_entrega}
+                  onChange={(e) => handleDetalleChange(index, "fecha_estimada_entrega", e.target.value)}
+                  required
+                  className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-sm">
-                  Bs {detalle.precio_total.toFixed(2)}
-                </span>
+                <span className="text-sm">Bs {detalle.precio_total.toFixed(2)}</span>
                 <button
                   type="button"
                   onClick={() => eliminarDetalle(index)}
@@ -297,8 +306,7 @@ const CrearPedidoPage = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Tipo de descuento */}
+          <div className="">
             <div>
               <label className="block font-medium">Tipo de descuento</label>
               <select
@@ -308,7 +316,6 @@ const CrearPedidoPage = () => {
                   setForm({
                     ...form,
                     tipo_descuento: e.target.value as any,
-                    // opcional: reset valor al cambiar tipo
                     descuento_pedido: 0,
                   })
                 }
@@ -319,7 +326,7 @@ const CrearPedidoPage = () => {
                 <option value="monto_por_unidad">Monto por unidad</option>
               </select>
             </div>
-            {/* Valor del descuento */}
+
             <div>
               <label className="block font-medium">
                 {form.tipo_descuento === "porcentaje"
@@ -335,7 +342,7 @@ const CrearPedidoPage = () => {
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    descuento_pedido: parseFloat(e.target.value),
+                    descuento_pedido: parseFloat(e.target.value || "0"),
                   })
                 }
                 min={0}
@@ -344,15 +351,15 @@ const CrearPedidoPage = () => {
                 className="w-full border p-2 rounded"
               />
             </div>
-            {/* Total calculado */}
+
             <div className="flex flex-col justify-end">
               <p className="text-right text-lg font-bold">
                 Total: Bs {calcularPrecioTotal().toFixed(2)}
               </p>
             </div>
           </div>
-
-          <div>
+        </div>
+         <div>
             <label className="block font-medium">Estado del pedido</label>
             <select
               name="estado_pedido"
@@ -366,13 +373,12 @@ const CrearPedidoPage = () => {
               <option value="Cancelado">Cancelado</option>
             </select>
           </div>
+
           <div className="flex flex-col justify-end">
             <p className="text-right text-lg font-bold">
               Total: Bs {calcularPrecioTotal().toFixed(2)}
             </p>
           </div>
-        </div>
-
         <button
           type="submit"
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
@@ -381,6 +387,31 @@ const CrearPedidoPage = () => {
           Guardar pedido
         </button>
       </form>
+
+      {/* ---- Modal Error ---- */}
+      {modalError && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full">
+            <h4 className="text-lg font-semibold mb-2">{modalError.title}</h4>
+            {modalError.message && <p className="text-sm text-gray-700 mb-3">{modalError.message}</p>}
+            {modalError.items && modalError.items.length > 0 && (
+              <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1 mb-4">
+                {modalError.items.map((it, i) => (
+                  <li key={i}>{it}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex justify-end">
+              <button
+                onClick={() => setModalError(null)}
+                className="px-4 py-2 rounded border hover:bg-gray-50"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

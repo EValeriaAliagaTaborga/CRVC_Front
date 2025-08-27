@@ -53,12 +53,12 @@ const Sidebar = () => {
         {/* Producción */}
         {tienePermiso(["Administrador", "Encargado de Producción"]) && (
           <li>
-            <Link to="/produccion" className="text-gray-50 hover:text-red-600">Producción</Link>
+            <Link to="/produccion" className="text-gray-50 hover:text-red-600">Producción de Horno</Link>
           </li>
         )}
 
         {/* Productos */}
-        {tienePermiso(["Administrador", "Encargado de Producción"]) && (
+        {tienePermiso(["Administrador", "Vendedor", "Encargado de Producción"]) && (
           <li>
             <Link to="/productos" className="text-gray-50 hover:text-red-600">Productos</Link>
           </li>

@@ -146,7 +146,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             path="/productos"
             element={
               <PrivateRoute
-                rolesPermitidos={["Administrador", "Encargado de Producción"]}
+                rolesPermitidos={["Administrador", "Vendedor", "Encargado de Producción"]}
               >
                 <DashboardLayout>
                   <ProductosPage />

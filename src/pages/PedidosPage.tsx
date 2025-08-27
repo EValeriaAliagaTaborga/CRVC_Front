@@ -178,6 +178,13 @@ const CategoryTable = ({
                     />
                   </td>
                   <td className="px-4 py-2 space-y-1">
+
+                    <Link
+                      to={`/pedidos/${r.pedidoId}/detalles/${r.detalleId}`}
+                      className="text-blue-600 hover:underline text-sm block"
+                    >
+                      Actualizar pedido
+                    </Link>
                     {esAdministrador && (
                       <button
                         onClick={() => onEliminar(r.pedidoId)}
@@ -186,12 +193,6 @@ const CategoryTable = ({
                         Eliminar
                       </button>
                     )}
-                    <Link
-                      to={`/pedidos/${r.pedidoId}/detalles/${r.detalleId}`}
-                      className="text-blue-600 hover:underline text-sm block"
-                    >
-                      Cambiar estado
-                    </Link>
                   </td>
                 </tr>
               ))}
@@ -427,6 +428,57 @@ export default function PedidosPage() {
           onEliminar={handleEliminar}
         />
       ))}
+
+            {/* === Pedidos Cancelados (no requieren actualización) === */}
+      <section className="space-y-2">
+        <h3 className="text-xl font-semibold">Pedidos Cancelados</h3>
+        <div className="overflow-x-auto bg-white shadow rounded">
+          <table className="min-w-full text-sm table-auto">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="px-4 py-2 text-left">#Pedido</th>
+                <th className="px-4 py-2 text-left">Cliente</th>
+                <th className="px-4 py-2 text-left">Dirección</th>
+                <th className="px-4 py-2 text-left">Creado</th>
+                <th className="px-4 py-2 text-left">Detalles</th>
+                <th className="px-4 py-2 text-left">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pedidos
+                .filter((p) => p.estado_pedido === "Cancelado")
+                .map((p) => (
+                  <tr key={p.id_pedido} className="border-t">
+                    <td className="px-4 py-2">{p.id_pedido}</td>
+                    <td className="px-4 py-2">{p.cliente}</td>
+                    <td className="px-4 py-2">{p.direccion}</td>
+                    <td className="px-4 py-2">
+                      {new Date(p.fecha_creacion_pedido).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-2">
+                      {p.detalles?.length ?? 0} ítem(s)
+                    </td>
+                    <td className="px-4 py-2">
+                      <Link
+                        to={`/pedidos/${p.id_pedido}`}
+                        className="text-blue-600 hover:underline text-sm"
+                      >
+                        Ver
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              {pedidos.filter((p) => p.estado_pedido === "Cancelado").length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center py-6 text-gray-500">
+                    No hay pedidos cancelados
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* Popup OK (pedido completado) */}
       {modalOk && (
