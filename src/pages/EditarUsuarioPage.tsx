@@ -72,7 +72,7 @@ const EditarUsuarioPage = () => {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       alert("Usuario actualizado correctamente");
-      navigate("/admin");
+      navigate("/administracion");
     } catch (error) {
       console.error("Error al actualizar el usuario:", error);
       alert("Hubo un error al actualizar el usuario.");
