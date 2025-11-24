@@ -3,11 +3,20 @@ import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getToken } from "../services/auth";
 import { getUsuario } from "../services/user";
-import { differenceInCalendarDays, parseISO, startOfDay, isValid } from "date-fns";
+import {
+  differenceInCalendarDays,
+  parseISO,
+  startOfDay,
+  isValid,
+} from "date-fns";
+import Modal from "../components/Modal";
+import SearchInput from "../components/SearchInput";
+import ActionGroup from "../components/ActionGroup";
 
 const usuario = getUsuario();
 const esAdministrador = usuario?.rol === "1";
 
+/* ===================== Tipos ===================== */
 interface DetallePedido {
   id_detalle_pedido: number;
   id_producto: string;
@@ -30,54 +39,64 @@ interface Pedido {
   detalles: DetallePedido[];
 }
 
-// Un row “plano” para la tabla
+// Row plano usado por las tablas
 interface Row {
   pedidoId: number;
   detalleId: number;
   cliente: string;
   producto: string;
   cantidad: number;
-  fecha: string;
+  fecha: string | null;
   entregado: boolean;
 }
 
 type SortDirection = "asc" | "desc";
 
+/* ===================== CategoryTable (modular) ===================== */
+
 interface CategoryTableProps {
   label: string;
   rows: Row[];
-  onToggleEntrega: (pedidoId: number, detalleId: number, nuevoValor: boolean) => void;
+  page: number;
+  onPageChange: (n: number) => void;
+  itemsPerPage?: number;
+  onToggleEntrega: (
+    pedidoId: number,
+    detalleId: number,
+    nuevoValor: boolean
+  ) => void;
   onEliminar: (pedidoId: number) => void;
 }
 
 const CategoryTable = ({
   label,
   rows,
+  page,
+  onPageChange,
+  itemsPerPage = 20,
   onToggleEntrega,
   onEliminar,
 }: CategoryTableProps) => {
-  const ITEMS_PER_PAGE = 20;
-
-  const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<keyof Row>("pedidoId");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
   const [q, setQ] = useState("");
 
-  // Filtro por producto/cliente (case-insensitive) antes de ordenar/paginar
+  // filtro case-insensitive por producto / cliente
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return rows;
     return rows.filter(
       (r) =>
-        r.producto.toLowerCase().includes(s) ||
-        r.cliente.toLowerCase().includes(s)
+        (r.producto || "").toLowerCase().includes(s) ||
+        (r.cliente || "").toLowerCase().includes(s) ||
+        String(r.pedidoId).includes(s)
     );
   }, [rows, q]);
 
-  // Ordenar
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const v1 = a[sortKey], v2 = b[sortKey];
+      const v1 = a[sortKey];
+      const v2 = b[sortKey];
       if (typeof v1 === "number" && typeof v2 === "number") {
         return sortDir === "asc" ? v1 - v2 : v2 - v1;
       }
@@ -86,203 +105,421 @@ const CategoryTable = ({
           ? Number(v1) - Number(v2)
           : Number(v2) - Number(v1);
       }
-      const s1 = String(v1), s2 = String(v2);
+      const s1 = String(v1 || "");
+      const s2 = String(v2 || "");
       return sortDir === "asc" ? s1.localeCompare(s2) : s2.localeCompare(s1);
     });
   }, [filtered, sortKey, sortDir]);
 
-  const totalPages = Math.ceil(sorted.length / ITEMS_PER_PAGE);
-  const pageRows = sorted.slice(
-    (page - 1) * ITEMS_PER_PAGE,
-    page * ITEMS_PER_PAGE
-  );
+  const totalPages = Math.max(1, Math.ceil(sorted.length / itemsPerPage));
+  const pageClamped = Math.min(Math.max(1, page), totalPages);
+
+  // cuando cambie búsqueda u orden, volver a página 1
+  useEffect(() => {
+    onPageChange(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, sortKey, sortDir]);
+
+  useEffect(() => {
+    // si page externo es mayor que totalPages, ajusta al máximo
+    if (page !== pageClamped) onPageChange(pageClamped);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPages]);
+
+  const start = (pageClamped - 1) * itemsPerPage;
+  const pageRows = sorted.slice(start, start + itemsPerPage);
 
   const onSort = (key: keyof Row) => {
-    if (key === sortKey) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
       setSortKey(key);
       setSortDir("asc");
     }
-    setPage(1);
   };
 
-  // Reiniciar página cuando cambian filas o búsqueda
-  useEffect(() => {
-    setPage(1);
-  }, [rows.length, q]);
-
   return (
-    <section className="space-y-2">
-      <h3 className="text-xl font-semibold">{label}</h3>
-      {rows.length === 0 ? (
-        <p className="text-gray-500">— ningún pedido —</p>
-      ) : (
-        <div className="overflow-x-auto bg-white shadow rounded">
-          {/* Buscador por producto/cliente */}
-          <div className="flex items-center gap-2 p-3 border-b">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por producto o cliente…"
-              className="w-full max-w-md px-3 py-2 border rounded"
-            />
-          </div>
-          <table className="min-w-full text-sm table-auto">
-            <thead className="bg-gray-100">
-              <tr>
-                {[
-                  { label: "#Pedido", key: "pedidoId" as const },
-                  { label: "Cliente", key: "cliente" as const },
-                  { label: "Producto", key: "producto" as const },
-                  { label: "Cant.", key: "cantidad" as const },
-                  { label: "Entrega", key: "fecha" as const },
-                  { label: "Entregado", key: "entregado" as const },
-                ].map((col) => (
-                  <th
-                    key={col.key}
-                    className="px-4 py-2 cursor-pointer select-none"
-                    onClick={() => onSort(col.key)}
-                  >
-                    {col.label}
+    <section className="space-y-3">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <h3 className="text-lg md:text-xl font-semibold">{label}</h3>
+
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <SearchInput
+            id={`search-${label.replace(/\s+/g, "-").toLowerCase()}`}
+            value={q}
+            onChange={setQ}
+            placeholder="Buscar producto, cliente, no # pedido"
+            aria-label={`Buscar en ${label}`}
+            // ajusta ancho en desktop dejando full width en móvil
+            className="md:max-w-xs"
+            // opcional: mostrar label en pantallas grandes
+            // label="Buscar"
+          />
+        </div>
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto bg-white shadow rounded">
+        <table className="min-w-full text-sm table-auto">
+          <thead className="bg-gray-50">
+            <tr>
+              {[
+                { label: "#Pedido", key: "pedidoId" as const },
+                { label: "Cliente", key: "cliente" as const },
+                { label: "Producto", key: "producto" as const },
+                { label: "Cant.", key: "cantidad" as const },
+                { label: "Entrega", key: "fecha" as const },
+                { label: "Entregado", key: "entregado" as const },
+              ].map((col) => (
+                <th
+                  key={col.key}
+                  className="px-4 py-3 text-left cursor-pointer select-none"
+                  onClick={() => onSort(col.key)}
+                >
+                  <div className="flex items-center gap-2">
+                    <span>{col.label}</span>
                     {sortKey === col.key && (
-                      <span>{sortDir === "asc" ? " ▲" : " ▼"}</span>
+                      <small className="text-xs">
+                        {sortDir === "asc" ? "▲" : "▼"}
+                      </small>
                     )}
-                  </th>
-                ))}
-                <th className="px-4 py-2">Acciones</th>
+                  </div>
+                </th>
+              ))}
+              <th className="px-4 py-3 text-left">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                  — ningún pedido —
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((r) => (
-                <tr key={r.detalleId} className="border-t">
-                  <td className="px-4 py-2">{r.pedidoId}</td>
-                  <td className="px-4 py-2">{r.cliente}</td>
-                  <td className="px-4 py-2">{r.producto}</td>
-                  <td className="px-4 py-2">{r.cantidad}</td>
-                  <td className="px-4 py-2">
-                    {new Date(r.fecha).toLocaleDateString()}
+            ) : (
+              pageRows.map((r) => (
+                <tr key={r.detalleId} className="border-t hover:bg-gray-50">
+                  <td className="px-4 py-3">{r.pedidoId}</td>
+                  <td className="px-4 py-3">{r.cliente}</td>
+                  <td className="px-4 py-3">{r.producto}</td>
+                  <td className="px-4 py-3">{r.cantidad}</td>
+                  <td className="px-4 py-3">
+                    <DateChip dateStr={r.fecha ?? undefined} />
                   </td>
-                  <td className="px-4 py-2 text-center">
+                  <td className="px-4 py-3 text-center">
                     <input
                       type="checkbox"
                       checked={r.entregado}
                       disabled={!esAdministrador}
                       onChange={() =>
-                        onToggleEntrega(
-                          r.pedidoId,
-                          r.detalleId,
-                          !r.entregado
-                        )
+                        onToggleEntrega(r.pedidoId, r.detalleId, !r.entregado)
+                      }
+                      aria-label={`Marcar entregado detalle ${r.detalleId}`}
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <ActionGroup
+                      primary={{
+                        label: "Actualizar",
+                        href: `/pedidos/${r.pedidoId}/detalles/${r.detalleId}`,
+                        ariaLabel: `Actualizar pedido ${r.pedidoId} detalle ${r.detalleId}`,
+                        variant: "link",
+                      }}
+                      secondary={
+                        esAdministrador
+                          ? {
+                              label: "Eliminar",
+                              onClick: () => onEliminar(r.pedidoId),
+                              ariaLabel: `Eliminar pedido ${r.pedidoId}`,
+                              variant: "danger",
+                            }
+                          : undefined
                       }
                     />
                   </td>
-                  <td className="px-4 py-2 space-y-1">
-
-                    <Link
-                      to={`/pedidos/${r.pedidoId}/detalles/${r.detalleId}`}
-                      className="text-blue-600 hover:underline text-sm block"
-                    >
-                      Actualizar pedido
-                    </Link>
-                    {esAdministrador && (
-                      <button
-                        onClick={() => onEliminar(r.pedidoId)}
-                        className="text-red-600 hover:underline text-sm block"
-                      >
-                        Eliminar
-                      </button>
-                    )}
-                  </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="flex justify-center items-center gap-2 p-4">
+              ))
+            )}
+          </tbody>
+        </table>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between p-3 border-t">
+          <div className="text-sm text-gray-600">
+            Mostrando <strong>{start + (pageRows.length ? 1 : 0)}</strong> -{" "}
+            <strong>{start + pageRows.length}</strong> de{" "}
+            <strong>{sorted.length}</strong>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              disabled={page === 1}
-              className="px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200"
+              onClick={() => onPageChange(1)}
+              disabled={pageClamped === 1}
+              className="px-3 py-1 rounded border disabled:opacity-50"
+              aria-label="Ir a la primera página"
+            >
+              «
+            </button>
+            <button
+              onClick={() => onPageChange(Math.max(pageClamped - 1, 1))}
+              disabled={pageClamped === 1}
+              className="px-3 py-1 rounded border disabled:opacity-50"
+              aria-label="Página anterior"
             >
               ◀
             </button>
-            <span className="text-sm">
-              {page} / {totalPages}
+            <span className="px-3 py-1 border rounded text-sm">
+              {pageClamped} / {totalPages}
             </span>
             <button
-              onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-              disabled={page === totalPages}
-              className="px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200"
+              onClick={() =>
+                onPageChange(Math.min(pageClamped + 1, totalPages))
+              }
+              disabled={pageClamped === totalPages}
+              className="px-3 py-1 rounded border disabled:opacity-50"
+              aria-label="Página siguiente"
             >
               ▶
             </button>
+            <button
+              onClick={() => onPageChange(totalPages)}
+              disabled={pageClamped === totalPages}
+              className="px-3 py-1 rounded border disabled:opacity-50"
+              aria-label="Ir a la última página"
+            >
+              »
+            </button>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {pageRows.length === 0 ? (
+          <div className="p-4 border rounded text-center text-gray-500">
+            — ningún pedido —
+          </div>
+        ) : (
+          pageRows.map((r) => (
+            <article
+              key={r.detalleId}
+              className="p-3 border rounded bg-white shadow-sm"
+            >
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">
+                      Pedido #{r.pedidoId}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      {r.cantidad} ítem(s)
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-700 mt-1">{r.producto}</div>
+                  <div className="text-xs text-gray-500 mt-1">{r.cliente}</div>
+                  <div className="mt-2">
+                    <DateChip dateStr={r.fecha ?? undefined} />
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end gap-2">
+                  <div>
+                    <input
+                      type="checkbox"
+                      checked={r.entregado}
+                      disabled={!esAdministrador}
+                      onChange={() =>
+                        onToggleEntrega(r.pedidoId, r.detalleId, !r.entregado)
+                      }
+                      aria-label={`Marcar entregado detalle ${r.detalleId}`}
+                    />
+                  </div>
+                  <ActionGroup
+                    primary={{
+                      label: "Actualizar",
+                      href: `/pedidos/${r.pedidoId}/detalles/${r.detalleId}`,
+                      ariaLabel: `Actualizar pedido ${r.pedidoId} detalle ${r.detalleId}`,
+                      variant: "link",
+                    }}
+                    secondary={
+                      esAdministrador
+                        ? {
+                            label: "Eliminar",
+                            onClick: () => onEliminar(r.pedidoId),
+                            ariaLabel: `Eliminar pedido ${r.pedidoId}`,
+                            variant: "danger",
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
+              </div>
+            </article>
+          ))
+        )}
+
+        {/* Mobile pagination */}
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => onPageChange(1)}
+            disabled={pageClamped === 1}
+            className="px-3 py-1 border rounded disabled:opacity-50"
+          >
+            ◀
+          </button>
+          <span className="text-sm">
+            {pageClamped} / {totalPages}
+          </span>
+          <button
+            onClick={() => onPageChange(Math.min(pageClamped + 1, totalPages))}
+            disabled={pageClamped === totalPages}
+            className="px-3 py-1 border rounded disabled:opacity-50"
+          >
+            ▶
+          </button>
+        </div>
+      </div>
     </section>
   );
 };
 
+/* ===================== DateChip + helpers ===================== */
+
+const DateChip = ({ dateStr }: { dateStr?: string | null }) => {
+  if (!dateStr) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+        —
+      </span>
+    );
+  }
+
+  const parsed = parseISO(dateStr);
+  if (!isValid(parsed)) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+        —
+      </span>
+    );
+  }
+
+  const diff = daysFromToday(parsed); // negativo = pasado
+  const label = parsed.toLocaleDateString();
+
+  let classes =
+    "inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ";
+  if (diff < 0) {
+    classes += "bg-red-100 text-red-800 border border-red-200";
+  } else if (diff > 7) {
+    classes += "bg-green-100 text-green-800 border border-green-200";
+  } else {
+    classes += "bg-yellow-100 text-yellow-800 border border-yellow-200";
+  }
+
+  return <span className={classes}>{label}</span>;
+};
+
+function toDateSafe(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const d = parseISO(s);
+  return isValid(d) ? d : null;
+}
+function daysFromToday(date: Date): number {
+  const today = startOfDay(new Date());
+  const d = startOfDay(date);
+  return differenceInCalendarDays(d, today);
+}
+
+/* ===================== Componente principal PedidosPage ===================== */
+
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  // modal that was used for "pedido completado" — now via Modal component
   const [modalOk, setModalOk] = useState<null | { pedidoId: number }>(null);
-  const [modalError, setModalError] = useState<null | { title: string; message: string }>(null);
+  // generic error modal content
+  const [modalError, setModalError] = useState<null | {
+    title: string;
+    message: string;
+  }>(null);
+
+  // deletion flow: pendingDeleteId triggers confirmation modal
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [successModal, setSuccessModal] = useState<null | {
+    title: string;
+    message?: string;
+  }>(null);
+
   const navigate = useNavigate();
 
-  const handleEliminar = async (id: number) => {
-    if (!window.confirm("¿Seguro de eliminar este pedido?")) return;
+  const handleEliminar = (id: number) => {
+    // open confirmation modal
+    setPendingDeleteId(id);
+  };
+
+  const confirmEliminar = async () => {
+    const id = pendingDeleteId;
+    if (!id) return;
+    setDeleting(true);
     try {
       await axios.delete(`http://localhost:3000/api/pedidos/${id}`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       setPedidos((p) => p.filter((x) => x.id_pedido !== id));
-    } catch {
+      setPendingDeleteId(null);
+      setSuccessModal({
+        title: "Pedido eliminado",
+        message: `El pedido #${id} fue eliminado correctamente.`,
+      });
+    } catch (e: any) {
       setModalError({
         title: "No se pudo eliminar el pedido",
-        message: "Ocurrió un problema eliminando el pedido. Intenta nuevamente."
+        message:
+          e?.response?.data?.message ||
+          "Ocurrió un problema eliminando el pedido. Intenta nuevamente.",
       });
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const findPedido = (id: number) => pedidos.find(p => p.id_pedido === id);
+  const findPedido = (id: number) => pedidos.find((p) => p.id_pedido === id);
 
   const toggleEntrega = async (
     pedidoId: number,
     detalleId: number,
     nuevoValor: boolean
   ) => {
-    // Pre-chequeo en frontend: si el pedido está Cancelado, no permitimos
     const pFound = findPedido(pedidoId);
     if (pFound?.estado_pedido === "Cancelado") {
       setModalError({
         title: "Pedido cancelado",
-        message: "No puedes registrar entregas en un pedido cancelado."
+        message: "No puedes registrar entregas en un pedido cancelado.",
       });
       return;
     }
 
-    // snapshot previo
     const prev = pedidos;
-    // UI optimista
     setPedidos((curr) =>
       curr.map((p) =>
         p.id_pedido === pedidoId
           ? {
               ...p,
               detalles: p.detalles.map((d) =>
-                d.id_detalle_pedido === detalleId ? { ...d, entregado: nuevoValor } : d
+                d.id_detalle_pedido === detalleId
+                  ? { ...d, entregado: nuevoValor }
+                  : d
               ),
             }
           : p
       )
     );
+
     try {
       const { data } = await axios.patch(
         `http://localhost:3000/api/pedidos/${pedidoId}/detalle/${detalleId}/entrega`,
         { entregado: nuevoValor },
         { headers: { Authorization: `Bearer ${getToken()}` } }
       );
-      // Si el pedido quedó completado, abre popup y sincroniza estado_pedido
+
       if (data?.pedidoCompletado) {
         setPedidos((curr) =>
           curr.map((p) =>
@@ -292,32 +529,34 @@ export default function PedidosPage() {
         setModalOk({ pedidoId });
       }
     } catch (e: any) {
-      // rollback
       setPedidos(prev);
       const status = e?.response?.status;
       const msg = e?.response?.data?.message;
 
-      if (status === 409 && msg?.toLowerCase?.().includes("stock insuficiente")) {
+      if (
+        status === 409 &&
+        msg?.toLowerCase?.().includes("stock insuficiente")
+      ) {
         setModalError({
           title: "Existencias insuficientes",
           message:
-            "No hay suficientes existencias para completar esta entrega. " +
-            "Esto no es válido. Por favor, contacta con el administrador para consultas."
+            "No hay suficientes existencias para completar esta entrega. Por favor, contacta con el administrador.",
         });
       } else if (status === 400 && msg?.toLowerCase?.().includes("cancelado")) {
         setModalError({
           title: "Pedido cancelado",
-          message: "No puedes registrar entregas en un pedido cancelado."
+          message: "No puedes registrar entregas en un pedido cancelado.",
         });
       } else if (status === 400 && msg?.toLowerCase?.().includes("revertir")) {
         setModalError({
           title: "Reversión no permitida",
-          message: "Solo un administrador puede revertir una entrega dentro de 24 horas."
+          message:
+            "Solo un administrador puede revertir una entrega dentro de 24 horas.",
         });
       } else {
         setModalError({
           title: "No se pudo actualizar la entrega",
-          message: msg || "Ocurrió un problema procesando la solicitud."
+          message: msg || "Ocurrió un problema procesando la solicitud.",
         });
       }
     }
@@ -332,37 +571,29 @@ export default function PedidosPage() {
       .catch(() => {
         setModalError({
           title: "Error al cargar pedidos",
-          message: "No se pudieron obtener los pedidos. Intenta nuevamente."
+          message: "No se pudieron obtener los pedidos. Intenta nuevamente.",
         });
       });
   }, []);
 
-  // Helpers de fecha
-  function toDateSafe(s: string | null | undefined): Date | null {
-    if (!s) return null;
-    const d = parseISO(s);
-    return isValid(d) ? d : null;
-  }
-  function daysFromToday(date: Date): number {
-    const today = startOfDay(new Date());
-    const d = startOfDay(date);
-    return differenceInCalendarDays(d, today);
-  }
-
   // Reconstruye filas para cada categoría
+  // Reconstruye filas para cada categoría (EXCLUYE pedidos cancelados)
   const buildRows = (filterFn: (d: DetallePedido) => boolean): Row[] =>
-    pedidos.flatMap((p) =>
-      p.detalles.filter(filterFn).map((d) => ({
-        pedidoId: p.id_pedido,
-        detalleId: d.id_detalle_pedido,
-        cliente: p.cliente,
-        producto: `${d.nombre_producto} (${d.tipo})`,
-        cantidad: d.cantidad_pedida,
-        fecha: d.fecha_estimada_entrega,
-        entregado: d.entregado,
-      }))
-    );
+    pedidos
+      .filter((p) => p.estado_pedido !== "Cancelado") // <- importante: excluir los pedidos cancelados
+      .flatMap((p) =>
+        p.detalles.filter(filterFn).map((d) => ({
+          pedidoId: p.id_pedido,
+          detalleId: d.id_detalle_pedido,
+          cliente: p.cliente,
+          producto: `${d.nombre_producto} (${d.tipo})`,
+          cantidad: d.cantidad_pedida,
+          fecha: d.fecha_estimada_entrega ?? null,
+          entregado: d.entregado,
+        }))
+      );
 
+  // Definición de categorías (igual que tenías) y su cálculo
   const categorias = useMemo(() => {
     const pendientes = (d: DetallePedido) => !d.entregado;
     const vencidos = (d: DetallePedido) => {
@@ -395,44 +626,132 @@ export default function PedidosPage() {
       !d.entregado && !toDateSafe(d.fecha_estimada_entrega);
 
     return [
-      { label: "Pendientes (todas las fechas)", rows: buildRows(pendientes) },
-      { label: "Vencidos", rows: buildRows(vencidos) },
-      { label: "Hoy", rows: buildRows(hoy) },
-      { label: "En 1 día", rows: buildRows(en1Dia) },
-      { label: "≤ 3 días", rows: buildRows(hasta3Dias) },
-      { label: "≤ 7 días", rows: buildRows(hasta7Dias) },
-      { label: "Próximos (>7 días)", rows: buildRows(proximos) },
-      { label: "Sin fecha", rows: buildRows(sinFecha) },
-      { label: "Completados", rows: buildRows((d) => d.entregado) },
-    ];
+      {
+        id: "pendientes",
+        label: "Pendientes (todas las fechas)",
+        rows: buildRows(pendientes),
+      },
+      { id: "vencidos", label: "Vencidos", rows: buildRows(vencidos) },
+      { id: "hoy", label: "Hoy", rows: buildRows(hoy) },
+      { id: "en1dia", label: "En 1 día", rows: buildRows(en1Dia) },
+      { id: "3dias", label: "≤ 3 días", rows: buildRows(hasta3Dias) },
+      { id: "7dias", label: "≤ 7 días", rows: buildRows(hasta7Dias) },
+      {
+        id: "proximos",
+        label: "Próximos (>7 días)",
+        rows: buildRows(proximos),
+      },
+      { id: "sinfecha", label: "Sin fecha", rows: buildRows(sinFecha) },
+      {
+        id: "completados",
+        label: "Completados",
+        rows: buildRows((d) => d.entregado),
+      },
+    ] as { id: string; label: string; rows: Row[] }[];
   }, [pedidos]);
 
+  // Tabs UI state + paginación por tab (guardada por id)
+  const [activeTab, setActiveTab] = useState<string>(
+    categorias[0]?.id ?? "pendientes"
+  );
+  const [pageByTab, setPageByTab] = useState<Record<string, number>>(() => {
+    const rec: Record<string, number> = {};
+    categorias.forEach((c) => (rec[c.id] = 1));
+    return rec;
+  });
+
+  // Si cambia la lista de categorías (por ejemplo tras carga), asegurar activeTab válido
+  useEffect(() => {
+    if (!categorias.find((c) => c.id === activeTab))
+      setActiveTab(categorias[0]?.id ?? "pendientes");
+    // ensure pageByTab has keys
+    setPageByTab((prev) => {
+      const next = { ...prev };
+      categorias.forEach((c) => {
+        if (!next[c.id]) next[c.id] = 1;
+      });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categorias.length]);
+
+  const onChangePageForTab = (tabId: string, n: number) => {
+    setPageByTab((prev) => ({ ...prev, [tabId]: n }));
+  };
+
   return (
-    <div className="space-y-8 p-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Pedidos registrados</h2>
-        <Link
-          to="/pedidos/crear"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          + Registrar pedido
-        </Link>
+    <div className="space-y-8 p-4 md:p-6 lg:p-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold">Pedidos registrados</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            Administración de entregas y seguimiento por fechas.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Link
+            to="/pedidos/crear"
+            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            + Registrar pedido
+          </Link>
+        </div>
       </div>
 
-      {categorias.map((cat) => (
-        <CategoryTable
-          key={cat.label}
-          label={cat.label}
-          rows={cat.rows}
-          onToggleEntrega={toggleEntrega}
-          onEliminar={handleEliminar}
-        />
-      ))}
+      {/* Tabs */}
+      <div className="bg-white rounded shadow-sm p-3">
+        <div className="flex overflow-x-auto gap-2 pb-2">
+          {categorias.map((c) => {
+            const count = c.rows.length;
+            const active = c.id === activeTab;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setActiveTab(c.id)}
+                className={`flex items-center gap-2 whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                  active ? "bg-sky-600 text-white shadow" : "bg-white border"
+                }`}
+                aria-current={active ? "true" : undefined}
+              >
+                <span>{c.label}</span>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full ${
+                    active ? "bg-white/20" : "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-            {/* === Pedidos Cancelados (no requieren actualización) === */}
+        <div className="mt-4">
+          {/* Render single active CategoryTable */}
+          {categorias.map((c) =>
+            c.id === activeTab ? (
+              <CategoryTable
+                key={c.id}
+                label={c.label}
+                rows={c.rows}
+                page={pageByTab[c.id] ?? 1}
+                onPageChange={(n) => onChangePageForTab(c.id, n)}
+                itemsPerPage={20}
+                onToggleEntrega={toggleEntrega}
+                onEliminar={handleEliminar}
+              />
+            ) : null
+          )}
+        </div>
+      </div>
+
+      {/* Pedidos Cancelados (tabla desktop + cards móvil) */}
       <section className="space-y-2">
-        <h3 className="text-xl font-semibold">Pedidos Cancelados</h3>
-        <div className="overflow-x-auto bg-white shadow rounded">
+        <h3 className="text-lg font-semibold">Pedidos Cancelados</h3>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto bg-white shadow rounded">
           <table className="min-w-full text-sm table-auto">
             <thead className="bg-gray-100">
               <tr>
@@ -453,7 +772,7 @@ export default function PedidosPage() {
                     <td className="px-4 py-2">{p.cliente}</td>
                     <td className="px-4 py-2">{p.direccion}</td>
                     <td className="px-4 py-2">
-                      {new Date(p.fecha_creacion_pedido).toLocaleDateString()}
+                      <DateChip dateStr={p.fecha_creacion_pedido} />
                     </td>
                     <td className="px-4 py-2">
                       {p.detalles?.length ?? 0} ítem(s)
@@ -461,14 +780,15 @@ export default function PedidosPage() {
                     <td className="px-4 py-2">
                       <Link
                         to={`/pedidos/${p.id_pedido}`}
-                        className="text-blue-600 hover:underline text-sm"
+                        className="text-sky-600 hover:underline text-sm"
                       >
                         Ver
                       </Link>
                     </td>
                   </tr>
                 ))}
-              {pedidos.filter((p) => p.estado_pedido === "Cancelado").length === 0 && (
+              {pedidos.filter((p) => p.estado_pedido === "Cancelado").length ===
+                0 && (
                 <tr>
                   <td colSpan={6} className="text-center py-6 text-gray-500">
                     No hay pedidos cancelados
@@ -478,52 +798,126 @@ export default function PedidosPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile cards (igual estilo que las otras tablas móviles) */}
+        <div className="md:hidden space-y-3">
+          {pedidos.filter((p) => p.estado_pedido === "Cancelado").length ===
+          0 ? (
+            <div className="p-4 border rounded text-center text-gray-500">
+              No hay pedidos cancelados
+            </div>
+          ) : (
+            pedidos
+              .filter((p) => p.estado_pedido === "Cancelado")
+              .map((p) => (
+                <article
+                  key={p.id_pedido}
+                  className="p-3 border rounded bg-white shadow-sm"
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium">
+                          Pedido #{p.id_pedido}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {p.detalles?.length ?? 0} ítem(s)
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-700 mt-1">
+                        {p.cliente}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {p.direccion}
+                      </div>
+                      <div className="mt-2">
+                        <DateChip dateStr={p.fecha_creacion_pedido} />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="flex flex-col items-end text-sm">
+                        <Link
+                          to={`/pedidos/${p.id_pedido}`}
+                          className="text-sky-600 hover:underline"
+                        >
+                          Ver
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              ))
+          )}
+        </div>
       </section>
 
-      {/* Popup OK (pedido completado) */}
-      {modalOk && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full">
-            <h4 className="text-lg font-semibold mb-2">Pedido completado</h4>
-            <p className="text-sm text-gray-700 mb-4">
-              El pedido <span className="font-medium">#{modalOk.pedidoId}</span> ha completado todas las entregas.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setModalOk(null)}
-                className="px-4 py-2 rounded border hover:bg-gray-50"
-              >
-                Cerrar
-              </button>
-              <Link
-                to={`/pedidos/${modalOk.pedidoId}`}
-                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
-                onClick={() => setModalOk(null)}
-              >
-                Ver pedido
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal: Pedido completado (antes modalOk inline) */}
+      <Modal
+        open={!!modalOk}
+        title="Pedido completado"
+        onClose={() => setModalOk(null)}
+        secondaryLabel="Seguir viendo"
+        onSecondary={() => setModalOk(null)}
+        primaryLabel="Ver pedido"
+        onPrimary={() => {
+          if (modalOk) {
+            const id = modalOk.pedidoId;
+            setModalOk(null);
+            navigate(`/pedidos/${id}`);
+          }
+        }}
+      >
+        <p className="text-sm text-gray-700">
+          El pedido <span className="font-medium">#{modalOk?.pedidoId}</span> ha
+          completado todas las entregas.
+        </p>
+      </Modal>
 
-      {/* Popup Error genérico / falta stock / cancelado / reversión */}
-      {modalError && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full">
-            <h4 className="text-lg font-semibold mb-2">{modalError.title}</h4>
-            <p className="text-sm text-gray-700 mb-4">{modalError.message}</p>
-            <div className="flex justify-end">
-              <button
-                onClick={() => setModalError(null)}
-                className="px-4 py-2 rounded border hover:bg-gray-50"
-              >
-                Entendido
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal: Error genérico / falta stock / cancelado / reversión */}
+      <Modal
+        open={!!modalError}
+        title={modalError?.title}
+        onClose={() => setModalError(null)}
+        primaryLabel="Cerrar"
+        onPrimary={() => setModalError(null)}
+      >
+        <p className="text-sm text-gray-700">{modalError?.message}</p>
+      </Modal>
+
+      {/* Modal: Confirmación de eliminación */}
+      <Modal
+        open={pendingDeleteId !== null}
+        title="Confirmar eliminación"
+        onClose={() => setPendingDeleteId(null)}
+        secondaryLabel="Cancelar"
+        onSecondary={() => setPendingDeleteId(null)}
+        primaryLabel={deleting ? "Eliminando..." : "Confirmar eliminación"}
+        onPrimary={confirmEliminar}
+        maxWidthClass="max-w-md"
+      >
+        <p className="text-sm text-gray-700">
+          ¿Estás segura/o de que deseas eliminar el pedido{" "}
+          <span className="font-medium">#{pendingDeleteId}</span>? Esta acción
+          no se puede deshacer.
+        </p>
+      </Modal>
+
+      {/* Modal: Éxito (por ejemplo eliminación correcta) */}
+      <Modal
+        open={!!successModal}
+        title={successModal?.title}
+        onClose={() => setSuccessModal(null)}
+        secondaryLabel="Seguir en la página"
+        onSecondary={() => setSuccessModal(null)}
+        primaryLabel="Volver a Pedidos"
+        onPrimary={() => {
+          setSuccessModal(null);
+          navigate("/pedidos");
+        }}
+      >
+        <p className="text-sm text-gray-700">{successModal?.message}</p>
+      </Modal>
     </div>
   );
 }

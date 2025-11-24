@@ -27,6 +27,7 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import MetricasPage from "./pages/MetricasPage";
 import RecuperarContrasenaPage from "./pages/RecuperarContrasenaPage";
 import RestablecerContrasenaPage from "./pages/RestablecerContrasenaPage";
+import VerPedidoPage from "./pages/VerPedidoPage";
 
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./index.css";
@@ -38,6 +39,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <ErrorBoundary>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/recuperar" element={<RecuperarContrasenaPage/>} />
           <Route path="/restablecer" element={<RestablecerContrasenaPage/>} />
@@ -138,6 +140,16 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
                 <DashboardLayout>
                   <EditarDetallePedidoPage />
+                </DashboardLayout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/pedidos/:pedidoId"
+            element={
+              <PrivateRoute rolesPermitidos={["Administrador", "Vendedor"]}>
+                <DashboardLayout>
+                  <VerPedidoPage />
                 </DashboardLayout>
               </PrivateRoute>
             }

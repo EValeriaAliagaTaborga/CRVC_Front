@@ -29,7 +29,7 @@ type ModalError =
   | {
       title: string;
       message?: string;
-      items?: string[]; // para listar violaciones por producto
+      items?: string[];
     };
 
 const CrearPedidoPage = () => {
@@ -44,6 +44,7 @@ const CrearPedidoPage = () => {
 
   const [detalles, setDetalles] = useState<DetallePedido[]>([]);
   const [modalError, setModalError] = useState<ModalError>(null);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -57,8 +58,8 @@ const CrearPedidoPage = () => {
             headers: { Authorization: `Bearer ${getToken()}` },
           }),
         ]);
-        setConstrucciones(resConstrucciones.data);
-        setProductos(resProductos.data);
+        setConstrucciones(resConstrucciones.data || []);
+        setProductos(resProductos.data || []);
       } catch {
         setModalError({
           title: "No se pudo cargar la información",
@@ -70,18 +71,14 @@ const CrearPedidoPage = () => {
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const agregarDetalle = () => {
     setDetalles((prev) => [
       ...prev,
-      {
-        id_producto: "",
-        cantidad_pedida: 0,
-        fecha_estimada_entrega: "",
-        precio_total: 0,
-      },
+      { id_producto: "", cantidad_pedida: 1, fecha_estimada_entrega: "", precio_total: 0 },
     ]);
   };
 
@@ -90,27 +87,29 @@ const CrearPedidoPage = () => {
     field: K,
     value: DetallePedido[K]
   ) => {
-    const nuevos = [...detalles];
-    nuevos[index] = { ...nuevos[index], [field]: value };
+    setDetalles((prev) => {
+      const nuevos = [...prev];
+      const actual = { ...nuevos[index], [field]: value } as DetallePedido;
 
-    if (field === "id_producto" || field === "cantidad_pedida") {
-      const producto = productos.find((p) => p.id_producto === nuevos[index].id_producto);
-      const cantidad = Number(nuevos[index].cantidad_pedida);
-      nuevos[index].precio_total = producto ? producto.precio_unitario * cantidad : 0;
-    }
+      // si cambió producto o cantidad, recalcular precio_total
+      if (field === "id_producto" || field === "cantidad_pedida") {
+        const producto = productos.find((p) => p.id_producto === actual.id_producto);
+        const cantidad = Number(actual.cantidad_pedida || 0);
+        actual.precio_total = producto ? Number(producto.precio_unitario || 0) * cantidad : 0;
+      }
 
-    setDetalles(nuevos);
+      nuevos[index] = actual;
+      return nuevos;
+    });
   };
 
   const eliminarDetalle = (index: number) => {
-    const nuevos = [...detalles];
-    nuevos.splice(index, 1);
-    setDetalles(nuevos);
+    setDetalles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const calcularPrecioTotal = () => {
-    const baseTotal = detalles.reduce((sum, d) => sum + d.precio_total, 0);
-    const totalUnidades = detalles.reduce((sum, d) => sum + d.cantidad_pedida, 0);
+    const baseTotal = detalles.reduce((sum, d) => sum + Number(d.precio_total || 0), 0);
+    const totalUnidades = detalles.reduce((sum, d) => sum + Number(d.cantidad_pedida || 0), 0);
     const disc = Number(form.descuento_pedido) || 0;
 
     switch (form.tipo_descuento) {
@@ -174,11 +173,12 @@ const CrearPedidoPage = () => {
       return;
     }
 
+    setSubmitting(true);
     try {
       await axios.post(
         "http://localhost:3000/api/pedidos",
         {
-          id_construccion: parseInt(form.id_construccion),
+          id_construccion: parseInt(form.id_construccion, 10),
           estado_pedido: form.estado_pedido,
           precio_pedido: calcularPrecioTotal(),
           descuento_pedido: Number(form.descuento_pedido),
@@ -206,120 +206,179 @@ const CrearPedidoPage = () => {
           message: msg || "Ocurrió un problema procesando la solicitud.",
         });
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div>
+    <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold mb-4">Registrar nuevo pedido</h2>
 
-      <form onSubmit={handleSubmit} className="bg-white p-6 rounded shadow-md space-y-6 max-w-4xl">
-        <div>
-          <label className="block font-medium">Construcción (nombre_empresa)</label>
-          <select
-            name="id_construccion"
-            value={form.id_construccion}
-            onChange={handleChange}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Seleccione una construcción</option>
-            {construcciones.map((c) => (
-              <option key={c.id_construccion} value={c.id_construccion}>
-                {c.nombre_empresa} - {c.direccion}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Productos del pedido</h3>
-          {detalles.map((detalle, index) => (
-            <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-              <div>
-                <label className="block font-medium">Producto</label>
-                <select
-                  value={detalle.id_producto}
-                  onChange={(e) => handleDetalleChange(index, "id_producto", e.target.value)}
-                  className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Seleccione producto</option>
-                  {productos.map((p) => (
-                    <option key={p.id_producto} value={p.id_producto}>
-                      {p.nombre_producto} - {p.tipo}
-                    </option>
-                  ))}
-                </select>
-                {detalle.id_producto &&
-                  (() => {
-                    const prod = productos.find((p) => p.id_producto === detalle.id_producto);
-                    return (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Stock disponible: {prod?.cantidad_stock ?? 0} uds.
-                      </p>
-                    );
-                  })()}
-              </div>
-              <div>
-                <label className="block font-medium">Cantidad</label>
-              <input
-                type="number"
-                placeholder="Cantidad"
-                value={detalle.cantidad_pedida}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value);
-                  handleDetalleChange(index, "cantidad_pedida", isNaN(value) ? 0 : value);
-                }}
-                className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-              </div>
-              <div>
-                <label className="block font-medium">Fecha estimada de entrega</label>
-                <input
-                  type="date"
-                  value={detalle.fecha_estimada_entrega}
-                  onChange={(e) => handleDetalleChange(index, "fecha_estimada_entrega", e.target.value)}
-                  required
-                  className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-sm">Bs {detalle.precio_total.toFixed(2)}</span>
-                <button
-                  type="button"
-                  onClick={() => eliminarDetalle(index)}
-                  className="text-red-600 text-sm hover:underline"
-                >
-                  Eliminar
-                </button>
-              </div>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={agregarDetalle}
-            className="text-blue-600 text-sm mt-2 hover:underline"
-          >
-            + Agregar producto
-          </button>
-        </div>
-
+      <form onSubmit={handleSubmit} className="bg-white p-4 md:p-6 rounded shadow space-y-6">
+        {/* Construcción + Estado */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium mb-1">Construcción (empresa - dirección)</label>
+            <select
+              name="id_construccion"
+              value={form.id_construccion}
+              onChange={handleChange}
+              className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-sky-500"
+              required
+            >
+              <option value="">Seleccione una construcción</option>
+              {construcciones.map((c) => (
+                <option key={c.id_construccion} value={c.id_construccion}>
+                  {c.nombre_empresa} - {c.direccion}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Estado del pedido</label>
+            <select
+              name="estado_pedido"
+              value={form.estado_pedido}
+              onChange={handleChange}
+              className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-sky-500"
+            >
+              <option value="En progreso">En progreso</option>
+              <option value="Listo para entrega">Listo para entrega</option>
+              <option value="Entregado">Entregado</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Productos del pedido (lista de detalles) */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Productos del pedido</h3>
+            <button
+              type="button"
+              onClick={agregarDetalle}
+              className="text-sm text-sky-600 hover:underline"
+            >
+              + Agregar producto
+            </button>
+          </div>
+
+          {/* Cabecera (solo visible en md+) */}
+          <div className="hidden md:grid grid-cols-12 gap-4 bg-gray-50 p-3 rounded text-sm text-gray-600">
+            <div className="col-span-3">Producto</div>
+            <div className="col-span-2">Cantidad</div>
+            <div className="col-span-3">Fecha estimada</div>
+            <div className="col-span-2">Subtotal</div>
+            <div className="col-span-2 text-right">Acciones</div>
+          </div>
+
+          {/* Lista de detalles */}
+          <div className="space-y-3">
+            {detalles.map((detalle, index) => {
+              const prod = productos.find((p) => p.id_producto === detalle.id_producto);
+              return (
+                <div key={index} className="border rounded p-3 bg-white shadow-sm">
+                  <div className="md:grid md:grid-cols-12 md:items-center md:gap-4">
+                    {/* Producto */}
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-medium mb-1">Producto</label>
+                      <select
+                        value={detalle.id_producto}
+                        onChange={(e) => handleDetalleChange(index, "id_producto", e.target.value)}
+                        className="w-full border border-gray-300 p-2 rounded"
+                      >
+                        <option value="">Seleccione producto</option>
+                        {productos.map((p) => (
+                          <option key={p.id_producto} value={p.id_producto}>
+                            {p.nombre_producto} - {p.tipo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Cantidad */}
+                    <div className="mt-3 md:mt-0 md:col-span-2">
+                      <label className="block text-xs font-medium mb-1">Cantidad</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={detalle.cantidad_pedida}
+                        onChange={(e) =>
+                          handleDetalleChange(
+                            index,
+                            "cantidad_pedida",
+                            Number(e.target.value) <= 0 ? 0 : Number(e.target.value)
+                          )
+                        }
+                        className="w-full border border-gray-300 p-2 rounded"
+                      />
+                    </div>
+
+                    {/* Fecha estimada */}
+                    <div className="mt-3 md:mt-0 md:col-span-3">
+                      <label className="block text-xs font-medium mb-1">Fecha estimada de entrega</label>
+                      <input
+                        type="date"
+                        value={detalle.fecha_estimada_entrega}
+                        onChange={(e) => handleDetalleChange(index, "fecha_estimada_entrega", e.target.value)}
+                        className="w-full border border-gray-300 p-2 rounded"
+                      />
+                    </div>
+
+                    {/* Subtotal */}
+                    <div className="mt-3 md:mt-0 md:col-span-2 flex items-center">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Subtotal</label>
+                        <div className="text-sm font-medium">Bs {Number(detalle.precio_total || 0).toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    {/* Acciones */}
+                    <div className="mt-3 md:mt-0 md:col-span-2 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => eliminarDetalle(index)}
+                        className="text-red-600 hover:underline text-sm"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    {detalle.id_producto && (
+                        <p className="text-xs text-gray-500 mt-2">
+                          Stock: <span className="font-medium">{prod?.cantidad_stock ?? 0} uds</span>
+                        </p>
+                      )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {detalles.length === 0 && (
+              <div className="p-3 text-center text-gray-500 border rounded">No hay productos agregados</div>
+            )}
+          </div>
+        </div>
+
+        {/* Resumen y descuentos */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block font-medium">Tipo de descuento</label>
+              <label className="block text-sm font-medium mb-1">Tipo de descuento</label>
               <select
                 name="tipo_descuento"
                 value={form.tipo_descuento}
                 onChange={(e) =>
-                  setForm({
-                    ...form,
+                  setForm((prev) => ({
+                    ...prev,
                     tipo_descuento: e.target.value as any,
                     descuento_pedido: 0,
-                  })
+                  }))
                 }
-                className="w-full border p-2 rounded"
+                className="w-full border border-gray-300 p-2 rounded"
               >
                 <option value="porcentaje">Porcentaje (%)</option>
                 <option value="monto_total">Monto fijo total</option>
@@ -328,7 +387,7 @@ const CrearPedidoPage = () => {
             </div>
 
             <div>
-              <label className="block font-medium">
+              <label className="block text-sm font-medium mb-1">
                 {form.tipo_descuento === "porcentaje"
                   ? "Descuento (%)"
                   : form.tipo_descuento === "monto_total"
@@ -340,57 +399,55 @@ const CrearPedidoPage = () => {
                 name="descuento_pedido"
                 value={form.descuento_pedido}
                 onChange={(e) =>
-                  setForm({
-                    ...form,
-                    descuento_pedido: parseFloat(e.target.value || "0"),
-                  })
+                  setForm((prev) => ({ ...prev, descuento_pedido: Number(e.target.value || 0) }))
                 }
                 min={0}
                 step="0.01"
                 max={form.tipo_descuento === "porcentaje" ? 100 : undefined}
-                className="w-full border p-2 rounded"
+                className="w-full border border-gray-300 p-2 rounded"
               />
             </div>
+          </div>
 
-            <div className="flex flex-col justify-end">
-              <p className="text-right text-lg font-bold">
-                Total: Bs {calcularPrecioTotal().toFixed(2)}
-              </p>
-            </div>
+          <div className="flex flex-col items-end">
+            <div className="text-sm text-gray-600">Total</div>
+            <div className="text-xl font-bold">Bs {calcularPrecioTotal().toFixed(2)}</div>
           </div>
         </div>
-         <div>
-            <label className="block font-medium">Estado del pedido</label>
-            <select
-              name="estado_pedido"
-              value={form.estado_pedido}
-              onChange={handleChange}
-              className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="En progreso">En progreso</option>
-              <option value="Listo para entrega">Listo para entrega</option>
-              <option value="Entregado">Entregado</option>
-              <option value="Cancelado">Cancelado</option>
-            </select>
-          </div>
 
-          <div className="flex flex-col justify-end">
-            <p className="text-right text-lg font-bold">
-              Total: Bs {calcularPrecioTotal().toFixed(2)}
-            </p>
-          </div>
-        <button
-          type="submit"
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          disabled={detalles.length === 0}
-        >
-          Guardar pedido
-        </button>
+        {/* Submit */}
+        <div className="flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              // reset form helper
+              setDetalles([]);
+              setForm({
+                id_construccion: "",
+                estado_pedido: "En progreso",
+                descuento_pedido: 0,
+                tipo_descuento: "porcentaje",
+              });
+            }}
+            className="px-3 py-2 border rounded hover:bg-gray-50 text-sm"
+            disabled={submitting}
+          >
+            Limpiar
+          </button>
+
+          <button
+            type="submit"
+            className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+            disabled={detalles.length === 0 || submitting}
+          >
+            {submitting ? "Guardando..." : "Guardar pedido"}
+          </button>
+        </div>
       </form>
 
       {/* ---- Modal Error ---- */}
       {modalError && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full">
             <h4 className="text-lg font-semibold mb-2">{modalError.title}</h4>
             {modalError.message && <p className="text-sm text-gray-700 mb-3">{modalError.message}</p>}
