@@ -1,7 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
+// src/pages/AdministracionPage.tsx
+import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { getToken } from "../services/auth";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
+import Modal from "../components/Modal";
+import SearchInput from "../components/SearchInput";
+import ActionGroup from "../components/ActionGroup";
 
 interface Usuario {
   id: number;
@@ -13,44 +17,58 @@ interface Usuario {
 
 const AdministracionPage = () => {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [tipoReporte, setTipoReporte] = useState<'pedidos'|'produccion'|'kardex'>('pedidos');
-  const [formato, setFormato] = useState<'pdf'|'xlsx'>('pdf');
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
+  const [tipoReporte, setTipoReporte] = useState<"pedidos" | "produccion" | "kardex">("pedidos");
+  const [formato, setFormato] = useState<"pdf" | "xlsx">("pdf");
+  const [fechaInicio, setFechaInicio] = useState("");
+  const [fechaFin, setFechaFin] = useState("");
   const [cargando, setCargando] = useState(false);
-  const [busqueda, setBusqueda] = useState('');
+  const [busqueda, setBusqueda] = useState("");
   const [paginaActual, setPaginaActual] = useState(1);
   const usuariosPorPagina = 15;
   const navigate = useNavigate();
 
-  // Kardex
-  const [kardexProductoId, setKardexProductoId] = useState('');
-  const [kardexTipoMov, setKardexTipoMov] = useState<''|'ENTRADA'|'SALIDA'>('');
+  // Kardex (se dejan los controles; no usados en la UI principal excepto en reportes)
+  const [kardexProductoId, setKardexProductoId] = useState("");
+  const [kardexTipoMov, setKardexTipoMov] = useState<"" | "ENTRADA" | "SALIDA">("");
   const [kardexTodos, setKardexTodos] = useState(false);
 
-  // Crear usuario (modal simple)
-  const [showCrear, setShowCrear] = useState(false);
-  const [nuevoNombre, setNuevoNombre] = useState('');
-  const [nuevoEmail, setNuevoEmail] = useState('');
-  const [nuevoPass, setNuevoPass] = useState('');
-  const [nuevoRol, setNuevoRol] = useState<'1'|'2'|'3'>('2');
+  // Crear usuario (modal)
+  const [crearOpen, setCrearOpen] = useState(false);
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [nuevoEmail, setNuevoEmail] = useState("");
+  const [nuevoPass, setNuevoPass] = useState("");
+  const [nuevoRol, setNuevoRol] = useState<"1" | "2" | "3">("2");
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
 
   const rolesMap: { [key: string]: string } = {
     "1": "Administrador",
     "2": "Vendedor",
-    "3": "Encargado de Producción"
+    "3": "Encargado de Producción",
   };
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${getToken()}` }), []);
 
+  // Modals de confirmación y mensajes
+  const [pendingDelete, setPendingDelete] = useState<null | { id: number; nombre: string }>(null);
+  const [pendingBloqueo, setPendingBloqueo] = useState<null | { id: number; nombre: string; bloquear: boolean }>(null);
+  const [modalError, setModalError] = useState<null | { title: string; message: string }>(null);
+  const [successModal, setSuccessModal] = useState<null | { title: string; message?: string }>(null);
+  const [loadingUsuarios, setLoadingUsuarios] = useState(true);
+  const [processingAction, setProcessingAction] = useState(false);
+
   const cargarUsuarios = async () => {
+    setLoadingUsuarios(true);
     try {
-      const response = await axios.get('http://localhost:3000/api/usuarios', { headers });
-      setUsuarios(response.data);
-    } catch (error) {
-      console.error('Error al obtener los usuarios:', error);
-      alert('Error al obtener usuarios');
+      const response = await axios.get("http://localhost:3000/api/usuarios", { headers });
+      setUsuarios(response.data || []);
+    } catch (error: any) {
+      console.error("Error al obtener los usuarios:", error);
+      setModalError({
+        title: "Error al obtener usuarios",
+        message: error?.response?.data?.message || "No se pudieron cargar los usuarios. Intenta nuevamente.",
+      });
+    } finally {
+      setLoadingUsuarios(false);
     }
   };
 
@@ -63,56 +81,95 @@ const AdministracionPage = () => {
     navigate(`/administracion/usuarios/editar/${id}`);
   };
 
-  const handleCrearUsuario = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCrearUsuario = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!nuevoNombre.trim() || !nuevoEmail.trim() || !nuevoPass.trim()) {
-      alert("Completa nombre, email y contraseña.");
+      setModalError({ title: "Campos incompletos", message: "Completa nombre, email y contraseña." });
       return;
     }
     setGuardandoUsuario(true);
     try {
-      await axios.post('http://localhost:3000/api/usuarios', {
-        nombre: nuevoNombre.trim(),
-        email: nuevoEmail.trim(),
-        contrasena: nuevoPass,
-        id_rol: Number(nuevoRol),
-      }, { headers });
+      await axios.post(
+        "http://localhost:3000/api/usuarios",
+        {
+          nombre: nuevoNombre.trim(),
+          email: nuevoEmail.trim(),
+          contrasena: nuevoPass,
+          id_rol: Number(nuevoRol),
+        },
+        { headers }
+      );
 
-      setShowCrear(false);
-      setNuevoNombre(''); setNuevoEmail(''); setNuevoPass(''); setNuevoRol('2');
+      setCrearOpen(false);
+      setNuevoNombre("");
+      setNuevoEmail("");
+      setNuevoPass("");
+      setNuevoRol("2");
+      setSuccessModal({ title: "Usuario creado", message: "Se creó el usuario correctamente." });
       await cargarUsuarios();
     } catch (err: any) {
       console.error(err);
-      alert(err?.response?.data?.message || "Error al crear usuario");
+      setModalError({ title: "Error", message: err?.response?.data?.message || "Error al crear usuario" });
     } finally {
       setGuardandoUsuario(false);
     }
   };
 
-  const handleEliminar = async (id: number) => {
-    if (!window.confirm("¿Eliminar este usuario? Esta acción es permanente.")) return;
+  // Abrir confirmación eliminar
+  const abrirEliminar = (u: Usuario) => {
+    setPendingDelete({ id: u.id, nombre: u.nombre });
+  };
+
+  // Confirmar eliminar
+  const confirmarEliminar = async () => {
+    if (!pendingDelete) return;
+    setProcessingAction(true);
     try {
-      await axios.delete(`http://localhost:3000/api/usuarios/${id}`, { headers });
-      setUsuarios(us => us.filter(u => u.id !== id));
+      await axios.delete(`http://localhost:3000/api/usuarios/${pendingDelete.id}`, { headers });
+      setUsuarios((us) => us.filter((x) => x.id !== pendingDelete.id));
+      setSuccessModal({ title: "Usuario eliminado", message: `Se eliminó ${pendingDelete.nombre}` });
+      setPendingDelete(null);
     } catch (err: any) {
       console.error(err);
-      alert(err?.response?.data?.message || "Error al eliminar usuario");
+      setModalError({ title: "Error al eliminar", message: err?.response?.data?.message || "No se pudo eliminar el usuario" });
+    } finally {
+      setProcessingAction(false);
     }
   };
 
-  const toggleBloqueo = async (u: Usuario) => {
+  // Abrir confirmación bloqueo/desbloqueo
+  const abrirBloqueo = (u: Usuario) => {
     const bloqueado = !!u.bloqueado;
-    const accion = bloqueado ? "DESBLOQUEAR" : "BLOQUEAR";
-    if (!window.confirm(`¿${accion} usuario ${u.nombre}?`)) return;
-    try {
-      await axios.patch(`http://localhost:3000/api/usuarios/${u.id}/bloqueo`, {
-        bloqueado: !bloqueado
-      }, { headers });
+    setPendingBloqueo({ id: u.id, nombre: u.nombre, bloquear: !bloqueado });
+  };
 
-      setUsuarios(us => us.map(x => x.id === u.id ? { ...x, bloqueado: !bloqueado } : x));
+  // Confirmar bloqueo/desbloqueo
+  const confirmarBloqueo = async () => {
+    if (!pendingBloqueo) return;
+    setProcessingAction(true);
+    try {
+      await axios.patch(
+        `http://localhost:3000/api/usuarios/${pendingBloqueo.id}/bloqueo`,
+        { bloqueado: pendingBloqueo.bloquear ? 1 : 0 },
+        { headers }
+      );
+
+      setUsuarios((us) =>
+        us.map((x) =>
+          x.id === pendingBloqueo.id ? { ...x, bloqueado: pendingBloqueo.bloquear ? 1 : 0 } : x
+        )
+      );
+
+      setSuccessModal({
+        title: pendingBloqueo.bloquear ? "Usuario bloqueado" : "Usuario desbloqueado",
+        message: `${pendingBloqueo.bloquear ? "Se bloqueó" : "Se desbloqueó"} a ${pendingBloqueo.nombre}`,
+      });
+      setPendingBloqueo(null);
     } catch (err: any) {
       console.error(err);
-      alert(err?.response?.data?.message || `Error al ${accion.toLowerCase()} usuario`);
+      setModalError({ title: "Error", message: err?.response?.data?.message || "Error al cambiar el bloqueo del usuario" });
+    } finally {
+      setProcessingAction(false);
     }
   };
 
@@ -120,18 +177,18 @@ const AdministracionPage = () => {
     e.preventDefault();
     setCargando(true);
     try {
-      if (tipoReporte === 'kardex') {
+      if (tipoReporte === "kardex") {
         const params: any = { formato };
         if (fechaInicio) params.desde = fechaInicio;
         if (fechaFin) params.hasta = fechaFin;
         if (kardexTipoMov) params.tipo = kardexTipoMov;
 
-        let url = '';
+        let url = "";
         if (kardexTodos) {
           url = `http://localhost:3000/api/productos/movimientos/export`;
         } else {
           if (!kardexProductoId.trim()) {
-            alert('Ingresa el código de producto o marca "Todos los productos".');
+            setModalError({ title: "Falta código", message: 'Ingresa el código de producto o marca "Todos los productos".' });
             setCargando(false);
             return;
           }
@@ -140,19 +197,17 @@ const AdministracionPage = () => {
 
         const res = await axios.get(url, {
           params,
-          responseType: 'blob',
-          headers
+          responseType: "blob",
+          headers,
         });
 
         const blob = new Blob([res.data], {
-          type: formato === 'pdf'
-            ? 'application/pdf'
-            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          type: formato === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         });
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         const dlName = kardexTodos
-          ? `kardex_todos_${new Date().toISOString().split('T')[0]}.${formato}`
-          : `kardex_${kardexProductoId}_${new Date().toISOString().split('T')[0]}.${formato}`;
+          ? `kardex_todos_${new Date().toISOString().split("T")[0]}.${formato}`
+          : `kardex_${kardexProductoId}_${new Date().toISOString().split("T")[0]}.${formato}`;
         link.href = URL.createObjectURL(blob);
         link.download = dlName;
         document.body.appendChild(link);
@@ -161,7 +216,7 @@ const AdministracionPage = () => {
         URL.revokeObjectURL(link.href);
       } else {
         const response = await axios.post(
-          'http://localhost:3000/api/reportes',
+          "http://localhost:3000/api/reportes",
           {
             tipo: tipoReporte,
             formato: formato,
@@ -169,312 +224,358 @@ const AdministracionPage = () => {
             fecha_fin: fechaFin,
           },
           {
-            responseType: 'blob',
-            headers
+            responseType: "blob",
+            headers,
           }
         );
 
         const blob = new Blob([response.data], {
-          type:
-            formato === 'pdf'
-              ? 'application/pdf'
-              : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          type: formato === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         });
         const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         link.href = url;
-        link.setAttribute(
-          'download',
-          `reporte_${tipoReporte}_${new Date().toISOString().split('T')[0]}.${formato}`
-        );
+        link.setAttribute("download", `reporte_${tipoReporte}_${new Date().toISOString().split("T")[0]}.${formato}`);
         document.body.appendChild(link);
         link.click();
         link.parentNode?.removeChild(link);
         window.URL.revokeObjectURL(url);
       }
     } catch (error) {
-      console.error('Error al generar el reporte:', error);
-      alert('Hubo un error al generar el reporte.');
+      console.error("Error al generar el reporte:", error);
+      setModalError({ title: "Error", message: "Hubo un error al generar el reporte." });
     } finally {
       setCargando(false);
     }
   };
 
-  // Filtrado
+  // Filtrado & paginación
   const usuariosFiltrados = usuarios.filter((usuario) =>
     usuario.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
     usuario.email.toLowerCase().includes(busqueda.toLowerCase()) ||
     rolesMap[usuario.id_rol]?.toLowerCase().includes(busqueda.toLowerCase())
   );
 
-  // Paginación
-  const totalPaginas = Math.ceil(usuariosFiltrados.length / usuariosPorPagina);
+  const totalPaginas = Math.max(1, Math.ceil(usuariosFiltrados.length / usuariosPorPagina));
   const inicio = (paginaActual - 1) * usuariosPorPagina;
   const usuariosPaginados = usuariosFiltrados.slice(inicio, inicio + usuariosPorPagina);
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Listado de Usuarios</h2>
-        <button
-          onClick={() => setShowCrear(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          + Nuevo usuario
-        </button>
+    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold">Listado de Usuarios</h2>
+          <p className="text-sm text-gray-600 mt-1">Administración de usuarios y generación de reportes.</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setCrearOpen(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            + Nuevo usuario
+          </button>
+        </div>
       </div>
 
-      <label className="block text-sm">Buscar Usuario</label>
-      <input
-        type="text"
-        placeholder="Buscar por nombre, correo o rol..."
-        value={busqueda}
-        onChange={(e) => {
-          setBusqueda(e.target.value);
-          setPaginaActual(1);
-        }}
-        className="border p-2 mb-4 w-full md:w-1/2 rounded"
-      />
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <SearchInput
+          id="search-usuarios"
+          value={busqueda}
+          onChange={(v) => { setBusqueda(v); setPaginaActual(1); }}
+          placeholder="Buscar por nombre, correo o rol..."
+          className="md:max-w-md"
+          aria-label="Buscar usuarios"
+        />
 
-      <div className="overflow-x-auto rounded-md shadow border border-gray-200 mb-10 bg-white">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="px-6 py-3 text-left font-semibold text-gray-700 uppercase">Nombre</th>
-              <th className="px-6 py-3 text-left font-semibold text-gray-700 uppercase">Correo</th>
-              <th className="px-6 py-3 text-left font-semibold text-gray-700 uppercase">Rol</th>
-              <th className="px-6 py-3 text-left font-semibold text-gray-700 uppercase">Estado</th>
-              <th className="px-6 py-3 text-center font-semibold text-gray-700 uppercase">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {usuariosPaginados.map((u) => {
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setBusqueda(""); setPaginaActual(1); }}
+            className="px-3 py-1 border rounded"
+          >
+            Limpiar
+          </button>
+        </div>
+      </div>
+
+      {/* Tabla desktop + cards mobile */}
+      <div className="bg-white rounded shadow overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
+          <table className="min-w-full text-sm table-auto">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="px-6 py-3 text-left font-semibold text-gray-700">Nombre</th>
+                <th className="px-6 py-3 text-left font-semibold text-gray-700">Correo</th>
+                <th className="px-6 py-3 text-left font-semibold text-gray-700">Rol</th>
+                <th className="px-6 py-3 text-left font-semibold text-gray-700">Estado</th>
+                <th className="px-6 py-3 text-center font-semibold text-gray-700">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuariosPaginados.map((u) => {
+                const isBlocked = !!u.bloqueado;
+                return (
+                  <tr key={u.id} className="border-t hover:bg-gray-50">
+                    <td className="px-6 py-4">{u.nombre}</td>
+                    <td className="px-6 py-4">{u.email}</td>
+                    <td className="px-6 py-4">{rolesMap[u.id_rol]}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-xs ${isBlocked ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                        {isBlocked ? "Bloqueado" : "Activo"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <ActionGroup
+                        primary={{
+                          label: "Editar",
+                          onClick: () => handleEditar(u.id),
+                          ariaLabel: `Editar usuario ${u.id}`,
+                          variant: "link",
+                        }}
+                        secondary={{
+                          label: isBlocked ? "Desbloquear" : "Bloquear",
+                          onClick: () => abrirBloqueo(u),
+                          ariaLabel: `${isBlocked ? "Desbloquear" : "Bloquear"} usuario ${u.id}`,
+                          variant: isBlocked ? "primary" : "danger",
+                        }}
+                        tertiary={{
+                          label: "Eliminar",
+                          onClick: () => abrirEliminar(u),
+                          ariaLabel: `Eliminar usuario ${u.id}`,
+                          variant: "danger",
+                        }}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+              {usuariosPaginados.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="text-center py-6 text-gray-500">No se encontraron usuarios</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden space-y-3 p-3">
+          {usuariosPaginados.length === 0 ? (
+            <div className="text-center text-gray-500 py-6">No se encontraron usuarios</div>
+          ) : (
+            usuariosPaginados.map((u) => {
               const isBlocked = !!u.bloqueado;
               return (
-                <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 text-gray-800">{u.nombre}</td>
-                  <td className="px-6 py-4 text-gray-600">{u.email}</td>
-                  <td className="px-6 py-4 text-gray-600">{rolesMap[u.id_rol]}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded text-xs ${isBlocked ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                      {isBlocked ? 'Bloqueado' : 'Activo'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center space-x-3">
-                    <button
-                      onClick={() => handleEditar(u.id)}
-                      className="text-blue-600 hover:text-blue-800 font-medium transition"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => toggleBloqueo(u)}
-                      className={`font-medium transition ${isBlocked ? 'text-green-700 hover:text-green-900' : 'text-yellow-600 hover:text-yellow-800'}`}
-                    >
-                      {isBlocked ? 'Desbloquear' : 'Bloquear'}
-                    </button>
-                    <button
-                      onClick={() => handleEliminar(u.id)}
-                      className="text-red-600 hover:text-red-800 font-medium transition"
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
+                <article key={u.id} className="border rounded p-3 bg-white shadow-sm">
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">{u.nombre}</div>
+                      <div className="text-xs text-gray-600">{u.email}</div>
+                      <div className="text-xs text-gray-600 mt-1">{rolesMap[u.id_rol]}</div>
+                      <div className="mt-2">
+                        <span className={`px-2 py-1 rounded text-xs ${isBlocked ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                          {isBlocked ? "Bloqueado" : "Activo"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <ActionGroup
+                        primary={{
+                          label: "Editar",
+                          onClick: () => handleEditar(u.id),
+                          ariaLabel: `Editar usuario ${u.id}`,
+                          variant: "link",
+                        }}
+                        secondary={{
+                          label: isBlocked ? "Desbloquear" : "Bloquear",
+                          onClick: () => abrirBloqueo(u),
+                          ariaLabel: `${isBlocked ? "Desbloquear" : "Bloquear"} usuario ${u.id}`,
+                          variant: isBlocked ? "primary" : "danger",
+                        }}
+                        tertiary={{
+                          label: "Eliminar",
+                          onClick: () => abrirEliminar(u),
+                          ariaLabel: `Eliminar usuario ${u.id}`,
+                          variant: "danger",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </article>
               );
-            })}
-            {usuariosPaginados.length === 0 && (
-              <tr>
-                <td colSpan={5} className="text-center py-6 text-gray-500">
-                  No se encontraron usuarios
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            })
+          )}
+        </div>
       </div>
 
+      {/* Paginación */}
       {totalPaginas > 1 && (
-        <div className="flex justify-center gap-2 mb-10">
-          {Array.from({ length: totalPaginas }, (_, i) => (
+        <div className="flex justify-center gap-2">
+          {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((n) => (
             <button
-              key={i + 1}
-              className={`px-3 py-1 border rounded ${paginaActual === i + 1 ? 'bg-blue-600 text-white' : 'bg-white text-blue-600'}`}
-              onClick={() => setPaginaActual(i + 1)}
+              key={n}
+              className={`px-3 py-1 border rounded ${paginaActual === n ? "bg-blue-600 text-white" : "bg-white text-blue-600"}`}
+              onClick={() => setPaginaActual(n)}
             >
-              {i + 1}
+              {n}
             </button>
           ))}
         </div>
       )}
 
-      {/* CREAR USUARIO */}
-      {showCrear && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
-          <form
-            onSubmit={handleCrearUsuario}
-            className="bg-white rounded shadow-lg p-6 w-full max-w-md space-y-4"
-          >
-            <h3 className="text-lg font-semibold">Nuevo usuario</h3>
-            <div>
-              <label className="block text-sm mb-1">Nombre</label>
-              <input
-                value={nuevoNombre}
-                onChange={e => setNuevoNombre(e.target.value)}
-                className="border rounded w-full px-3 py-2"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1">Correo</label>
-              <input
-                type="email"
-                value={nuevoEmail}
-                onChange={e => setNuevoEmail(e.target.value)}
-                className="border rounded w-full px-3 py-2"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1">Contraseña</label>
-              <input
-                type="password"
-                value={nuevoPass}
-                onChange={e => setNuevoPass(e.target.value)}
-                className="border rounded w-full px-3 py-2"
-                minLength={6}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1">Rol</label>
-              <select
-                value={nuevoRol}
-                onChange={e => setNuevoRol(e.target.value as any)}
-                className="border rounded w-full px-3 py-2"
-              >
-                <option value="2">Vendedor</option>
-                <option value="3">Encargado de Producción</option>
-                <option value="1">Administrador</option>
-              </select>
-            </div>
+      {/* Crear Usuario modal (usa Modal component) */}
+      <Modal
+        open={crearOpen}
+        title="Crear nuevo usuario"
+        onClose={() => setCrearOpen(false)}
+        secondaryLabel="Cancelar"
+        onSecondary={() => setCrearOpen(false)}
+        primaryLabel={guardandoUsuario ? "Guardando..." : "Crear"}
+        onPrimary={handleCrearUsuario}
+        maxWidthClass="max-w-md"
+      >
+        <form onSubmit={handleCrearUsuario} className="space-y-3">
+          <div>
+            <label className="block text-sm mb-1">Nombre</label>
+            <input value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} className="w-full border rounded px-3 py-2" required />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Correo</label>
+            <input type="email" value={nuevoEmail} onChange={(e) => setNuevoEmail(e.target.value)} className="w-full border rounded px-3 py-2" required />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Contraseña</label>
+            <input type="password" value={nuevoPass} onChange={(e) => setNuevoPass(e.target.value)} className="w-full border rounded px-3 py-2" minLength={6} required />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Rol</label>
+            <select value={nuevoRol} onChange={(e) => setNuevoRol(e.target.value as any)} className="w-full border rounded px-3 py-2">
+              <option value="2">Vendedor</option>
+              <option value="3">Encargado de Producción</option>
+              <option value="1">Administrador</option>
+            </select>
+          </div>
+        </form>
+      </Modal>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowCrear(false)}
-                className="px-4 py-2 rounded border"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={guardandoUsuario}
-                className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
-              >
-                {guardandoUsuario ? 'Guardando...' : 'Crear'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {/* Confirmación Eliminar */}
+      <Modal
+        open={!!pendingDelete}
+        title="Confirmar eliminación"
+        onClose={() => setPendingDelete(null)}
+        secondaryLabel="Cancelar"
+        onSecondary={() => setPendingDelete(null)}
+        primaryLabel={processingAction ? "Eliminando..." : "Eliminar"}
+        onPrimary={confirmarEliminar}
+        maxWidthClass="max-w-md"
+      >
+        <p className="text-sm text-gray-700">
+          ¿Estás segura/o de que deseas eliminar al usuario <span className="font-medium">{pendingDelete?.nombre}</span>? Esta acción es permanente.
+        </p>
+      </Modal>
+
+      {/* Confirmación Bloquear/Desbloquear */}
+      <Modal
+        open={!!pendingBloqueo}
+        title={pendingBloqueo?.bloquear ? "Confirmar bloqueo" : "Confirmar desbloqueo"}
+        onClose={() => setPendingBloqueo(null)}
+        secondaryLabel="Cancelar"
+        onSecondary={() => setPendingBloqueo(null)}
+        primaryLabel={processingAction ? (pendingBloqueo?.bloquear ? "Bloqueando..." : "Desbloqueando...") : (pendingBloqueo?.bloquear ? "Bloquear" : "Desbloquear")}
+        onPrimary={confirmarBloqueo}
+        maxWidthClass="max-w-md"
+      >
+        <p className="text-sm text-gray-700">
+          {pendingBloqueo?.bloquear
+            ? `¿Bloquear al usuario ${pendingBloqueo?.nombre}? No podrá acceder hasta ser desbloqueado.`
+            : `¿Desbloquear al usuario ${pendingBloqueo?.nombre}?`}
+        </p>
+      </Modal>
+
+      {/* Error modal */}
+      <Modal
+        open={!!modalError}
+        title={modalError?.title}
+        onClose={() => setModalError(null)}
+        primaryLabel="Cerrar"
+        onPrimary={() => setModalError(null)}
+      >
+        <p className="text-sm text-gray-700">{modalError?.message}</p>
+      </Modal>
+
+      {/* Success modal */}
+      <Modal
+        open={!!successModal}
+        title={successModal?.title}
+        onClose={() => setSuccessModal(null)}
+        primaryLabel="Cerrar"
+        onPrimary={() => setSuccessModal(null)}
+      >
+        <p className="text-sm text-gray-700">{successModal?.message}</p>
+      </Modal>
 
       {/* ===== Reportes ===== */}
-      <h2 className="text-xl font-semibold mb-2">Generar Reporte</h2>
-      <form onSubmit={handleGenerarReporte} className="bg-white p-6 rounded shadow-md space-y-4 max-w-lg">
-        <div>
-          <label className="block font-medium mb-1">Tipo de Reporte:</label>
-          <select
-            value={tipoReporte}
-            onChange={(e) => setTipoReporte(e.target.value as any)}
-            className="w-full p-2 border rounded"
-          >
-            <option value="pedidos">Pedidos</option>
-            <option value="produccion">Órdenes de Producción</option>
-            <option value="kardex">Kardex de Inventario</option>
-          </select>
-        </div>
-        <div>
-          <label className="block font-medium mb-1">Formato:</label>
-          <select
-            value={formato}
-            onChange={(e) => setFormato(e.target.value as any)}
-            className="w-full p-2 border rounded"
-          >
-            <option value="pdf">PDF</option>
-            <option value="xlsx">Excel</option>
-          </select>
-        </div>
-        <div>
-          <label className="block font-medium mb-1">Fecha Inicio:</label>
-          <input
-            type="date"
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-            required
-            className="w-full p-2 border rounded"
-          />
-        </div>
-        <div>
-          <label className="block font-medium mb-1">Fecha Fin:</label>
-          <input
-            type="date"
-            value={fechaFin}
-            onChange={(e) => setFechaFin(e.target.value)}
-            required
-            className="w-full p-2 border rounded"
-          />
-        </div>
+      <div>
+        <h2 className="text-xl font-semibold mb-2">Generar Reporte</h2>
+        <form onSubmit={handleGenerarReporte} className="bg-white p-6 rounded shadow-md space-y-4 max-w-lg">
+          <div>
+            <label className="block font-medium mb-1">Tipo de Reporte:</label>
+            <select value={tipoReporte} onChange={(e) => setTipoReporte(e.target.value as any)} className="w-full p-2 border rounded">
+              <option value="pedidos">Pedidos</option>
+              <option value="produccion">Órdenes de Producción</option>
+              <option value="kardex">Kardex de Inventario</option>
+            </select>
+          </div>
+          <div>
+            <label className="block font-medium mb-1">Formato:</label>
+            <select value={formato} onChange={(e) => setFormato(e.target.value as any)} className="w-full p-2 border rounded">
+              <option value="pdf">PDF</option>
+              <option value="xlsx">Excel</option>
+            </select>
+          </div>
+          <div>
+            <label className="block font-medium mb-1">Fecha Inicio:</label>
+            <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} required className="w-full p-2 border rounded" />
+          </div>
+          <div>
+            <label className="block font-medium mb-1">Fecha Fin:</label>
+            <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} required className="w-full p-2 border rounded" />
+          </div>
 
-        {tipoReporte === 'kardex' && (
-          <>
-            <div className="flex items-center gap-2">
-              <input
-                id="todos"
-                type="checkbox"
-                checked={kardexTodos}
-                onChange={(e) => setKardexTodos(e.target.checked)}
-              />
-              <label htmlFor="todos">Todos los productos</label>
-            </div>
-
-            {!kardexTodos && (
-              <div>
-                <label className="block font-medium mb-1">Código de Producto:</label>
-                <input
-                  type="text"
-                  value={kardexProductoId}
-                  onChange={(e) => setKardexProductoId(e.target.value)}
-                  className="w-full p-2 border rounded"
-                  placeholder="Ej: ADO-001"
-                  required
-                />
+          {tipoReporte === "kardex" && (
+            <>
+              <div className="flex items-center gap-2">
+                <input id="todos" type="checkbox" checked={kardexTodos} onChange={(e) => setKardexTodos(e.target.checked)} />
+                <label htmlFor="todos">Todos los productos</label>
               </div>
-            )}
 
-            <div>
-              <label className="block font-medium mb-1">Tipo de movimiento (opcional):</label>
-              <select
-                value={kardexTipoMov}
-                onChange={(e) => setKardexTipoMov(e.target.value as any)}
-                className="w-full p-2 border rounded"
-              >
-                <option value="">Todos</option>
-                <option value="ENTRADA">Entrada</option>
-                <option value="SALIDA">Salida</option>
-              </select>
-            </div>
-          </>
-        )}
+              {!kardexTodos && (
+                <div>
+                  <label className="block font-medium mb-1">Código de Producto:</label>
+                  <input type="text" value={kardexProductoId} onChange={(e) => setKardexProductoId(e.target.value)} className="w-full p-2 border rounded" placeholder="Ej: ADO-001" required />
+                </div>
+              )}
 
-        <button
-          type="submit"
-          disabled={cargando}
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-        >
-          {cargando ? 'Generando...' : 'Generar y Descargar'}
-        </button>
-      </form>
+              <div>
+                <label className="block font-medium mb-1">Tipo de movimiento (opcional):</label>
+                <select value={kardexTipoMov} onChange={(e) => setKardexTipoMov(e.target.value as any)} className="w-full p-2 border rounded">
+                  <option value="">Todos</option>
+                  <option value="ENTRADA">Entrada</option>
+                  <option value="SALIDA">Salida</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          <div className="flex justify-end">
+            <button type="submit" disabled={cargando} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+              {cargando ? "Generando..." : "Generar y Descargar"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };
