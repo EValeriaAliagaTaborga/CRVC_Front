@@ -49,10 +49,8 @@ export default function SearchInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={classNames(
-            "w-full pl-9 pr-3 py-2 border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400 placeholder-gray-400",
-            // size helpers (puedes overidr con className)
-          )}
+          className=
+            "w-full pl-9 pr-3 py-2 bg-white border shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400 placeholder-gray-400"
         />
       </div>
     </div>

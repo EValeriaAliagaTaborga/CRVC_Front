@@ -202,7 +202,7 @@ const ProductosPage = () => {
           <select
             value={filtroTipo}
             onChange={(e) => { setPaginaActual(1); setFiltroTipo(e.target.value); }}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-white border border-gray-900 p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Todos</option>
             <option value="Primera">Primera</option>
@@ -213,7 +213,7 @@ const ProductosPage = () => {
         <div className="flex gap-2">
           <button
             onClick={() => { setFiltroNombre(""); setFiltroTipo(""); setPaginaActual(1); }}
-            className="px-3 py-2 border rounded hover:bg-gray-50"
+            className="px-3 py-2 border hover:bg-gray-50"
           >
             Limpiar
           </button>
@@ -260,7 +260,7 @@ const ProductosPage = () => {
                       />
                       <button
                         onClick={() => openKardex(p)}
-                        className="px-2 py-1 border rounded text-sm hover:bg-gray-50"
+                        className="px-2 py-1 border text-sm hover:bg-gray-50"
                         aria-label={`Ver kardex ${p.id_producto}`}
                       >
                         Kardex

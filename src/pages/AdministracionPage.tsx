@@ -260,6 +260,8 @@ const AdministracionPage = () => {
   const inicio = (paginaActual - 1) * usuariosPorPagina;
   const usuariosPaginados = usuariosFiltrados.slice(inicio, inicio + usuariosPorPagina);
 
+  if (loadingUsuarios) return <p className="p-4">Cargando...</p>;
+
   return (
     <div className="space-y-6 p-4 md:p-6 lg:p-8">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -291,7 +293,7 @@ const AdministracionPage = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={() => { setBusqueda(""); setPaginaActual(1); }}
-            className="px-3 py-1 border rounded"
+            className="px-3 py-1 border"
           >
             Limpiar
           </button>
@@ -522,7 +524,7 @@ const AdministracionPage = () => {
         <form onSubmit={handleGenerarReporte} className="bg-white p-6 rounded shadow-md space-y-4 max-w-lg">
           <div>
             <label className="block font-medium mb-1">Tipo de Reporte:</label>
-            <select value={tipoReporte} onChange={(e) => setTipoReporte(e.target.value as any)} className="w-full p-2 border rounded">
+            <select value={tipoReporte} onChange={(e) => setTipoReporte(e.target.value as any)} className="w-full p-2 border">
               <option value="pedidos">Pedidos</option>
               <option value="produccion">Órdenes de Producción</option>
               <option value="kardex">Kardex de Inventario</option>
@@ -530,18 +532,18 @@ const AdministracionPage = () => {
           </div>
           <div>
             <label className="block font-medium mb-1">Formato:</label>
-            <select value={formato} onChange={(e) => setFormato(e.target.value as any)} className="w-full p-2 border rounded">
+            <select value={formato} onChange={(e) => setFormato(e.target.value as any)} className="w-full p-2 border">
               <option value="pdf">PDF</option>
               <option value="xlsx">Excel</option>
             </select>
           </div>
           <div>
             <label className="block font-medium mb-1">Fecha Inicio:</label>
-            <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} required className="w-full p-2 border rounded" />
+            <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} required className="w-full p-2 border" />
           </div>
           <div>
             <label className="block font-medium mb-1">Fecha Fin:</label>
-            <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} required className="w-full p-2 border rounded" />
+            <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} required className="w-full p-2 border" />
           </div>
 
           {tipoReporte === "kardex" && (

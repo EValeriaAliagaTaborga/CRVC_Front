@@ -1,9 +1,8 @@
-// src/pages/HomePage.tsx
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { removeToken, getToken } from "../services/auth";
+import { getToken } from "../services/auth";
 import { getUsuario } from "../services/user";
-import { useNavigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import Modal from "../components/Modal";
 import SearchInput from "../components/SearchInput";
 import ActionGroup from "../components/ActionGroup";
@@ -30,7 +29,6 @@ const HomePage = () => {
   const [loading, setLoading] = useState(true);
 
   const registrosPorPagina = 20;
-  const navigate = useNavigate();
 
   useEffect(() => {
     const u = getUsuario();
@@ -43,14 +41,54 @@ const HomePage = () => {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const [logsRes, prodRes, pedidosRes] = await Promise.all([
+        // Use Promise.allSettled so a 403 on one endpoint doesn't fail everything
+        const requests = [
           axios.get("http://localhost:3000/api/logs", { headers }),
           axios.get("http://localhost:3000/api/productos", { headers }),
           axios.get("http://localhost:3000/api/pedidos", { headers }),
-        ]);
-        setLogs(logsRes.data || []);
-        setProductos(prodRes.data || []);
-        setPedidos(pedidosRes.data || []);
+        ];
+
+        const results = await Promise.allSettled(requests);
+
+        // logs
+        if (results[0].status === "fulfilled") {
+          setLogs(results[0].value.data || []);
+        } else {
+          const err = (results[0] as PromiseRejectedResult).reason;
+          if (err?.response?.status === 403) {
+            // Rol no tiene permiso para ver logs -> no mostrar modal, solo vacío
+            console.warn("No permission to fetch logs:", err?.response?.data?.message);
+            setLogs([]);
+          } else {
+            throw err;
+          }
+        }
+
+        // productos
+        if (results[1].status === "fulfilled") {
+          setProductos(results[1].value.data || []);
+        } else {
+          const err = (results[1] as PromiseRejectedResult).reason;
+          if (err?.response?.status === 403) {
+            console.warn("No permission to fetch productos:", err?.response?.data?.message);
+            setProductos([]);
+          } else {
+            throw err;
+          }
+        }
+
+        // pedidos
+        if (results[2].status === "fulfilled") {
+          setPedidos(results[2].value.data || []);
+        } else {
+          const err = (results[2] as PromiseRejectedResult).reason;
+          if (err?.response?.status === 403) {
+            console.warn("No permission to fetch pedidos:", err?.response?.data?.message);
+            setPedidos([]);
+          } else {
+            throw err;
+          }
+        }
       } catch (err: any) {
         console.error("Error en Home fetch:", err);
         setModalError({
@@ -64,11 +102,6 @@ const HomePage = () => {
 
     fetchAll();
   }, []);
-
-  const handleLogout = () => {
-    removeToken();
-    navigate("/login");
-  };
 
   // Filtrado simple por usuario, acción o detalle
   const logsFiltrados = useMemo(() => {
@@ -91,7 +124,55 @@ const HomePage = () => {
 
   // Quick insights
   const ordenesPendientes = useMemo(() => pedidos.filter(p => p.estado_pedido === "En progreso" || p.estado_pedido === "Listo para Entrega"), [pedidos]);
-  const lowStockProducts = useMemo(() => productos.filter(p => Number(p.cantidad_stock) <= 10), [productos]); // umbral 10
+  const lowStockProducts = useMemo(() => productos.filter(p => Number(p.cantidad_stock) <= 1000), [productos]); // umbral 10
+
+  // ROLE-based access control for quick actions
+  // Roles expected: "Administrador", "Vendedor", "Encargado de Producción" OR numeric ids
+  const isAdmin = usuario?.rol === "1" || usuario?.rol === "Administrador";
+  const isVendedor = usuario?.rol === "2" || usuario?.rol === "Vendedor";
+  const isEncargadoProduccion = usuario?.rol === "3" || usuario?.rol === "Encargado de Producción";
+
+  // Define granular permissions
+  const canCreatePedido = Boolean(isAdmin || isVendedor);
+  const canViewProductos = Boolean(isAdmin || isVendedor || isEncargadoProduccion);
+  const canViewClientes = Boolean(isAdmin || isVendedor);
+  const canCreateOrden = Boolean(isAdmin || isEncargadoProduccion);
+  const canViewProduccion = Boolean(isAdmin || isEncargadoProduccion);
+
+  // Helper to safely build ActionGroup props (ActionGroup requires `primary` prop)
+  const buildActions = (items: { nuevoPedido?: boolean; productos?: boolean; clientes?: boolean }) => {
+    // determine primary as first available in priority: Nuevo Pedido, Productos, Clientes
+    const { nuevoPedido, productos: hasProductos, clientes: hasClientes } = items;
+
+    type ActionDef = { label: string; href?: string; ariaLabel?: string; variant?: any };
+
+    const one: ActionDef | null = nuevoPedido ? { label: "Nuevo Pedido", href: "/pedidos/crear", ariaLabel: "Crear pedido", variant: "primary" } : null;
+    const two: ActionDef | null = hasProductos ? { label: "Productos", href: "/productos", ariaLabel: "Ver productos", variant: "link" } : null;
+    const three: ActionDef | null = hasClientes ? { label: "Clientes", href: "/clientes", ariaLabel: "Ver clientes", variant: "default" } : null;
+
+    // pick primary
+    const primary = one || two || three;
+    if (!primary) return null; // nothing to render
+
+    // secondary/tertiary are the remaining in the order: the next available become secondary, then tertiary
+    const rest: ActionDef[] = [one, two, three].filter(Boolean).filter((a) => a !== primary) as ActionDef[];
+
+    return {
+      primary,
+      secondary: rest[0] || undefined,
+      tertiary: rest[1] || undefined,
+    };
+  };
+
+  if (loading) return <p className="p-4">Cargando...</p>;
+
+  // build props safely
+  const pedidosActions = isAdmin
+    ? buildActions({ nuevoPedido: true, productos: true, clientes: true })
+    : buildActions({ nuevoPedido: canCreatePedido, productos: canViewProductos, clientes: canViewClientes });
+  const produccionActions = isAdmin
+    ? buildActions({ nuevoPedido: true, productos: true, clientes: true })
+    : buildActions({ nuevoPedido: false, productos: canViewProduccion, clientes: false });
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6">
@@ -99,10 +180,6 @@ const HomePage = () => {
         <div>
           <h1 className="text-2xl font-semibold">Bienvenido{usuario ? `, ${usuario.nombre}` : ""}</h1>
           <p className="text-sm text-gray-600 mt-1">Resumen rápido del sistema y accesos directos.</p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={handleLogout} className="px-3 py-2 border rounded hover:bg-gray-50">Cerrar sesión</button>
         </div>
       </div>
 
@@ -114,16 +191,28 @@ const HomePage = () => {
           <p className="text-sm text-gray-500 mb-3">Atajos para las tareas más comunes.</p>
 
           <div className="space-y-2">
-            <ActionGroup
-              primary={{ label: "Nuevo Pedido", href: "/pedidos/crear", ariaLabel: "Crear pedido", variant: "primary" }}
-              secondary={{ label: "Productos", href: "/productos", ariaLabel: "Ver productos", variant: "link" }}
-              tertiary={{ label: "Clientes", href: "/clientes", ariaLabel: "Ver clientes", variant: "default" }}
-            />
-            <div className="mt-2">
+            {/* Row 1 - Pedidos / Productos / Clientes */}
+            {pedidosActions ? (
               <ActionGroup
-                primary={{ label: "Nueva Orden", href: "/produccion/crear", ariaLabel: "Crear orden", variant: "primary" }}
-                secondary={{ label: "Producción", href: "/produccion", ariaLabel: "Ver producción", variant: "link" }}
+                primary={pedidosActions.primary}
+                secondary={pedidosActions.secondary}
+                tertiary={pedidosActions.tertiary}
               />
+            ) : (
+              <div className="text-sm text-gray-500">No tienes accesos a Pedidos, Productos o Clientes.</div>
+            )}
+
+            {/* Row 2 - Producción */}
+            <div className="mt-2">
+              {produccionActions ? (
+                <ActionGroup
+                  primary={produccionActions.primary}
+                  secondary={produccionActions.secondary}
+                  tertiary={produccionActions.tertiary}
+                />
+              ) : (
+                <div className="text-sm text-gray-500">No tienes accesos a la sección de Producción.</div>
+              )}
             </div>
           </div>
         </div>
@@ -155,7 +244,7 @@ const HomePage = () => {
         {/* Low stock list */}
         <div className="bg-white rounded shadow p-4">
           <h3 className="font-semibold mb-2">Alertas de Inventario</h3>
-          <p className="text-sm text-gray-500 mb-2">Productos con stock igual o menor a 10</p>
+          <p className="text-sm text-gray-500 mb-2">Productos con stock igual o menor a 1000</p>
           <div className="space-y-2 max-h-40 overflow-auto">
             {lowStockProducts.length === 0 ? (
               <div className="text-sm text-gray-500">No hay alertas</div>
@@ -191,7 +280,7 @@ const HomePage = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => { setSearch(""); setCurrentPage(1); }}
-              className="px-3 py-2 border rounded hover:bg-gray-50"
+              className="px-3 py-2 border bg-white"
             >
               Limpiar
             </button>
