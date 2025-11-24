@@ -1,8 +1,12 @@
+// src/pages/ConstruccionesPage.tsx
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { getToken } from "../services/auth";
 import { getUsuario } from "../services/user";
+import Modal from "../components/Modal";
+import SearchInput from "../components/SearchInput";
+import ActionGroup from "../components/ActionGroup";
 
 const usuario = getUsuario();
 const esAdministrador = usuario?.rol === "1";
@@ -16,40 +20,64 @@ interface Construccion {
   nombre_empresa: string;
 }
 
-const ConstruccionesPage = () => {
+const ConstruccionesPage: React.FC = () => {
   const [construcciones, setConstrucciones] = useState<Construccion[]>([]);
   const navigate = useNavigate();
+
   const [filtroDireccion, setFiltroDireccion] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroContacto, setFiltroContacto] = useState("");
 
+  // modals / deletion state
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [modalError, setModalError] = useState<null | { title: string; message: string }>(null);
+  const [successModal, setSuccessModal] = useState<null | { title: string; message?: string }>(null);
+
   useEffect(() => {
     const fetchConstrucciones = async () => {
       try {
-        const res = await axios.get(
-          "http://localhost:3000/api/construcciones",
-          {
-            headers: { Authorization: `Bearer ${getToken()}` },
-          }
-        );
+        const res = await axios.get("http://localhost:3000/api/construcciones", {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
         setConstrucciones(res.data);
-      } catch (error) {
-        console.error("Error al obtener construcciones", error);
+      } catch (err: any) {
+        setModalError({
+          title: "Error al cargar construcciones",
+          message: err?.response?.data?.message || "No se pudieron obtener las construcciones. Intenta nuevamente.",
+        });
       }
     };
 
     fetchConstrucciones();
   }, []);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("¿Deseas eliminar esta construcción?")) return;
+  const handleDelete = (id: number) => {
+    // abrir modal de confirmación
+    setPendingDeleteId(id);
+  };
+
+  const confirmDelete = async () => {
+    const id = pendingDeleteId;
+    if (!id) return;
+    setDeleting(true);
     try {
       await axios.delete(`http://localhost:3000/api/construcciones/${id}`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
-      setConstrucciones(construcciones.filter((c) => c.id_construccion !== id));
-    } catch (error) {
-      alert("Error al eliminar construcción");
+      setConstrucciones((prev) => prev.filter((c) => c.id_construccion !== id));
+      setPendingDeleteId(null);
+      setSuccessModal({
+        title: "Construcción eliminada",
+        message: `La construcción #${id} se eliminó correctamente.`,
+      });
+    } catch (err: any) {
+      setModalError({
+        title: "No se pudo eliminar",
+        message: err?.response?.data?.message || "Ocurrió un error al eliminar la construcción. Intenta nuevamente.",
+      });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -57,97 +85,189 @@ const ConstruccionesPage = () => {
     (c) =>
       c.direccion.toLowerCase().includes(filtroDireccion.toLowerCase()) &&
       c.estado_obra.toLowerCase().includes(filtroEstado.toLowerCase()) &&
-      c.nombre_contacto_obra
-        .toLowerCase()
-        .includes(filtroContacto.toLowerCase())
+      c.nombre_contacto_obra.toLowerCase().includes(filtroContacto.toLowerCase())
   );
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Construcciones registradas</h2>
-        <Link
-          to="/construcciones/crear"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          + Registrar construcción
-        </Link>
-      </div>
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <label className="block text-sm">Direccion</label>
-          <input
-            type="text"
-            placeholder="Filtrar por dirección"
-            value={filtroDireccion}
-            onChange={(e) => setFiltroDireccion(e.target.value)}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <h2 className="text-2xl font-bold">Construcciones registradas</h2>
+          <p className="text-sm text-gray-600 mt-1">Listado y administración de construcciones por cliente.</p>
         </div>
-        <div>
-          <label className="block text-sm">Estado de Obra</label>
-          <input
-            type="text"
-            placeholder="Filtrar por estado de obra"
-            value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value)}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm">Contacto</label>
-          <input
-            type="text"
-            placeholder="Filtrar por contacto"
-            value={filtroContacto}
-            onChange={(e) => setFiltroContacto(e.target.value)}
-            className="w-full border border-gray-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+
+        <div className="flex items-center gap-3">
+          <Link
+            to="/construcciones/crear"
+            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            + Registrar construcción
+          </Link>
         </div>
       </div>
-      <div className="bg-white shadow-md rounded">
+
+      {/* filtros con SearchInput */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <SearchInput
+          id="filtro-direccion"
+          value={filtroDireccion}
+          onChange={(v) => setFiltroDireccion(v)}
+          placeholder="Filtrar por dirección"
+          label="Dirección"
+        />
+        <SearchInput
+          id="filtro-estado"
+          value={filtroEstado}
+          onChange={(v) => setFiltroEstado(v)}
+          placeholder="Filtrar por estado de obra"
+          label="Estado de obra"
+        />
+        <SearchInput
+          id="filtro-contacto"
+          value={filtroContacto}
+          onChange={(v) => setFiltroContacto(v)}
+          placeholder="Filtrar por contacto"
+          label="Contacto"
+        />
+      </div>
+
+      {/* Tabla desktop */}
+      <div className="hidden md:block overflow-x-auto bg-white shadow rounded">
         <table className="min-w-full text-sm table-auto">
-          <thead className="bg-gray-200">
+          <thead className="bg-gray-100">
             <tr>
-              <th className="px-4 py-2">Cliente</th>
-              <th className="px-4 py-2">Dirección</th>
-              <th className="px-4 py-2">Estado</th>
-              <th className="px-4 py-2">Contacto obra</th>
-              <th className="px-4 py-2">Celular</th>
-              <th className="px-4 py-2">Acciones</th>
+              <th className="px-4 py-2 text-left">Cliente</th>
+              <th className="px-4 py-2 text-left">Dirección</th>
+              <th className="px-4 py-2 text-left">Estado</th>
+              <th className="px-4 py-2 text-left">Contacto obra</th>
+              <th className="px-4 py-2 text-left">Celular</th>
+              <th className="px-4 py-2 text-left">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {construccionesFiltradas.map((c) => (
-              <tr key={c.id_construccion} className="border-t">
-                <td className="px-4 py-2">{c.nombre_empresa}</td>
-                <td className="px-4 py-2">{c.direccion}</td>
-                <td className="px-4 py-2">{c.estado_obra}</td>
-                <td className="px-4 py-2">{c.nombre_contacto_obra}</td>
-                <td className="px-4 py-2">{c.celular_contacto_obra}</td>
-                <td className="px-4 py-2 space-x-2">
-                  <button
-                    onClick={() =>
-                      navigate(`/construcciones/editar/${c.id_construccion}`)
+              <tr key={c.id_construccion} className="border-t hover:bg-gray-50">
+                <td className="px-4 py-3">{c.nombre_empresa}</td>
+                <td className="px-4 py-3">{c.direccion}</td>
+                <td className="px-4 py-3">{c.estado_obra}</td>
+                <td className="px-4 py-3">{c.nombre_contacto_obra}</td>
+                <td className="px-4 py-3">{c.celular_contacto_obra}</td>
+                <td className="px-4 py-3">
+                  <ActionGroup
+                    primary={{
+                      label: "Editar",
+                      href: `/construcciones/editar/${c.id_construccion}`,
+                      ariaLabel: `Editar construcción ${c.id_construccion}`,
+                      variant: "link",
+                    }}
+                    secondary={
+                      esAdministrador
+                        ? {
+                            label: "Eliminar",
+                            onClick: () => handleDelete(c.id_construccion),
+                            ariaLabel: `Eliminar construcción ${c.id_construccion}`,
+                            variant: "danger",
+                          }
+                        : undefined
                     }
-                    className="text-blue-600 hover:underline"
-                  >
-                    Editar
-                  </button>
-                  {esAdministrador && (
-                    <button
-                      onClick={() => handleDelete(c.id_construccion)}
-                      className="text-red-600 hover:underline"
-                    >
-                      Eliminar
-                    </button>
-                  )}
+                  />
                 </td>
               </tr>
             ))}
+            {construccionesFiltradas.length === 0 && (
+              <tr>
+                <td colSpan={6} className="text-center py-6 text-gray-500">No se encontraron resultados.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {construccionesFiltradas.length === 0 ? (
+          <div className="p-4 border rounded text-center text-gray-500">No se encontraron resultados.</div>
+        ) : (
+          construccionesFiltradas.map((c) => (
+            <article key={c.id_construccion} className="p-3 border rounded bg-white shadow-sm">
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">{c.nombre_empresa}</div>
+                    <div className="text-xs text-gray-600">{c.estado_obra}</div>
+                  </div>
+                  <div className="text-sm text-gray-700 mt-1">{c.direccion}</div>
+                  <div className="text-xs text-gray-500 mt-1">{c.nombre_contacto_obra} · {c.celular_contacto_obra}</div>
+                </div>
+
+                <div className="flex flex-col items-end gap-2">
+                  <ActionGroup
+                    primary={{
+                      label: "Editar",
+                      href: `/construcciones/editar/${c.id_construccion}`,
+                      ariaLabel: `Editar construcción ${c.id_construccion}`,
+                      variant: "link",
+                    }}
+                    secondary={
+                      esAdministrador
+                        ? {
+                            label: "Eliminar",
+                            onClick: () => handleDelete(c.id_construccion),
+                            ariaLabel: `Eliminar construcción ${c.id_construccion}`,
+                            variant: "danger",
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+
+      {/* Modal: Confirmación eliminación */}
+      <Modal
+        open={pendingDeleteId !== null}
+        title="Confirmar eliminación"
+        onClose={() => setPendingDeleteId(null)}
+        secondaryLabel="Cancelar"
+        onSecondary={() => setPendingDeleteId(null)}
+        primaryLabel={deleting ? "Eliminando..." : "Confirmar eliminación"}
+        onPrimary={confirmDelete}
+        maxWidthClass="max-w-md"
+      >
+        <p className="text-sm text-gray-700">
+          ¿Estás seguro/a de eliminar la construcción <span className="font-medium">#{pendingDeleteId}</span>? Esta acción no se puede deshacer.
+        </p>
+      </Modal>
+
+      {/* Modal: Error */}
+      <Modal
+        open={!!modalError}
+        title={modalError?.title}
+        onClose={() => setModalError(null)}
+        primaryLabel="Cerrar"
+        onPrimary={() => setModalError(null)}
+      >
+        <p className="text-sm text-gray-700">{modalError?.message}</p>
+      </Modal>
+
+      {/* Modal: Éxito */}
+      <Modal
+        open={!!successModal}
+        title={successModal?.title}
+        onClose={() => setSuccessModal(null)}
+        secondaryLabel="Seguir en la página"
+        onSecondary={() => setSuccessModal(null)}
+        primaryLabel="Volver a construcciones"
+        onPrimary={() => {
+          setSuccessModal(null);
+          navigate("/construcciones");
+        }}
+      >
+        <p className="text-sm text-gray-700">{successModal?.message}</p>
+      </Modal>
     </div>
   );
 };
