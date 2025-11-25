@@ -13,9 +13,6 @@ import Modal from "../components/Modal";
 import SearchInput from "../components/SearchInput";
 import ActionGroup from "../components/ActionGroup";
 
-const usuario = getUsuario();
-const esAdministrador = usuario?.rol === "1";
-
 /* ===================== Tipos ===================== */
 interface DetallePedido {
   id_detalle_pedido: number;
@@ -66,6 +63,7 @@ interface CategoryTableProps {
     nuevoValor: boolean
   ) => void;
   onEliminar: (pedidoId: number) => void;
+  isAdmin: boolean;
 }
 
 const CategoryTable = ({
@@ -76,6 +74,7 @@ const CategoryTable = ({
   itemsPerPage = 20,
   onToggleEntrega,
   onEliminar,
+  isAdmin,
 }: CategoryTableProps) => {
   const [sortKey, setSortKey] = useState<keyof Row>("pedidoId");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
@@ -149,10 +148,7 @@ const CategoryTable = ({
             onChange={setQ}
             placeholder="Buscar producto, cliente, no # pedido"
             aria-label={`Buscar en ${label}`}
-            // ajusta ancho en desktop dejando full width en móvil
             className="md:max-w-xs"
-            // opcional: mostrar label en pantallas grandes
-            // label="Buscar"
           />
         </div>
       </div>
@@ -178,9 +174,7 @@ const CategoryTable = ({
                   <div className="flex items-center gap-2">
                     <span>{col.label}</span>
                     {sortKey === col.key && (
-                      <small className="text-xs">
-                        {sortDir === "asc" ? "▲" : "▼"}
-                      </small>
+                      <small className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</small>
                     )}
                   </div>
                 </th>
@@ -209,7 +203,7 @@ const CategoryTable = ({
                     <input
                       type="checkbox"
                       checked={r.entregado}
-                      disabled={!esAdministrador}
+                      disabled={false} /* ahora cualquier rol puede marcar entregado (editar) */
                       onChange={() =>
                         onToggleEntrega(r.pedidoId, r.detalleId, !r.entregado)
                       }
@@ -225,7 +219,7 @@ const CategoryTable = ({
                         variant: "link",
                       }}
                       secondary={
-                        esAdministrador
+                        isAdmin
                           ? {
                               label: "Eliminar",
                               onClick: () => onEliminar(r.pedidoId),
@@ -245,9 +239,7 @@ const CategoryTable = ({
         {/* Pagination */}
         <div className="flex items-center justify-between p-3 border-t">
           <div className="text-sm text-gray-600">
-            Mostrando <strong>{start + (pageRows.length ? 1 : 0)}</strong> -{" "}
-            <strong>{start + pageRows.length}</strong> de{" "}
-            <strong>{sorted.length}</strong>
+            Mostrando <strong>{start + (pageRows.length ? 1 : 0)}</strong> - <strong>{start + pageRows.length}</strong> de <strong>{sorted.length}</strong>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -266,13 +258,9 @@ const CategoryTable = ({
             >
               ◀
             </button>
-            <span className="px-3 py-1 border rounded text-sm">
-              {pageClamped} / {totalPages}
-            </span>
+            <span className="px-3 py-1 border rounded text-sm">{pageClamped} / {totalPages}</span>
             <button
-              onClick={() =>
-                onPageChange(Math.min(pageClamped + 1, totalPages))
-              }
+              onClick={() => onPageChange(Math.min(pageClamped + 1, totalPages))}
               disabled={pageClamped === totalPages}
               className="px-3 py-1 rounded border disabled:opacity-50"
               aria-label="Página siguiente"
@@ -294,24 +282,15 @@ const CategoryTable = ({
       {/* Mobile cards */}
       <div className="md:hidden space-y-3">
         {pageRows.length === 0 ? (
-          <div className="p-4 border rounded text-center text-gray-500">
-            — ningún pedido —
-          </div>
+          <div className="p-4 border rounded text-center text-gray-500">— ningún pedido —</div>
         ) : (
           pageRows.map((r) => (
-            <article
-              key={r.detalleId}
-              className="p-3 border rounded bg-white shadow-sm"
-            >
+            <article key={r.detalleId} className="p-3 border rounded bg-white shadow-sm">
               <div className="flex justify-between items-start gap-3">
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">
-                      Pedido #{r.pedidoId}
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      {r.cantidad} ítem(s)
-                    </div>
+                    <div className="text-sm font-medium">Pedido #{r.pedidoId}</div>
+                    <div className="text-xs text-gray-600">{r.cantidad} ítem(s)</div>
                   </div>
                   <div className="text-sm text-gray-700 mt-1">{r.producto}</div>
                   <div className="text-xs text-gray-500 mt-1">{r.cliente}</div>
@@ -325,7 +304,7 @@ const CategoryTable = ({
                     <input
                       type="checkbox"
                       checked={r.entregado}
-                      disabled={!esAdministrador}
+                      disabled={false}
                       onChange={() =>
                         onToggleEntrega(r.pedidoId, r.detalleId, !r.entregado)
                       }
@@ -340,7 +319,7 @@ const CategoryTable = ({
                       variant: "link",
                     }}
                     secondary={
-                      esAdministrador
+                      isAdmin
                         ? {
                             label: "Eliminar",
                             onClick: () => onEliminar(r.pedidoId),
@@ -365,9 +344,7 @@ const CategoryTable = ({
           >
             ◀
           </button>
-          <span className="text-sm">
-            {pageClamped} / {totalPages}
-          </span>
+          <span className="text-sm">{pageClamped} / {totalPages}</span>
           <button
             onClick={() => onPageChange(Math.min(pageClamped + 1, totalPages))}
             disabled={pageClamped === totalPages}
@@ -386,26 +363,21 @@ const CategoryTable = ({
 const DateChip = ({ dateStr }: { dateStr?: string | null }) => {
   if (!dateStr) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">
-        —
-      </span>
+      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">—</span>
     );
   }
 
   const parsed = parseISO(dateStr);
   if (!isValid(parsed)) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">
-        —
-      </span>
+      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">—</span>
     );
   }
 
   const diff = daysFromToday(parsed); // negativo = pasado
   const label = parsed.toLocaleDateString();
 
-  let classes =
-    "inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ";
+  let classes = "inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ";
   if (diff < 0) {
     classes += "bg-red-100 text-red-800 border border-red-200";
   } else if (diff > 7) {
@@ -435,20 +407,23 @@ export default function PedidosPage() {
   // modal that was used for "pedido completado" — now via Modal component
   const [modalOk, setModalOk] = useState<null | { pedidoId: number }>(null);
   // generic error modal content
-  const [modalError, setModalError] = useState<null | {
-    title: string;
-    message: string;
-  }>(null);
+  const [modalError, setModalError] = useState<null | { title: string; message: string }>(null);
 
   // deletion flow: pendingDeleteId triggers confirmation modal
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [successModal, setSuccessModal] = useState<null | {
-    title: string;
-    message?: string;
-  }>(null);
+  const [successModal, setSuccessModal] = useState<null | { title: string; message?: string }>(null);
 
   const navigate = useNavigate();
+
+  // obtener usuario y roles en tiempo de ejecución
+  const usuario = getUsuario();
+  const esAdministrador = Boolean(
+    usuario?.rol === "1" ||
+      usuario?.rol === "Administrador" ||
+      String(usuario?.rol).toLowerCase() === "administrador" ||
+      String(usuario?.rol).toLowerCase() === "admin"
+  );
 
   const handleEliminar = (id: number) => {
     // open confirmation modal
@@ -576,11 +551,10 @@ export default function PedidosPage() {
       });
   }, []);
 
-  // Reconstruye filas para cada categoría
   // Reconstruye filas para cada categoría (EXCLUYE pedidos cancelados)
   const buildRows = (filterFn: (d: DetallePedido) => boolean): Row[] =>
     pedidos
-      .filter((p) => p.estado_pedido !== "Cancelado") // <- importante: excluir los pedidos cancelados
+      .filter((p) => p.estado_pedido !== "Cancelado")
       .flatMap((p) =>
         p.detalles.filter(filterFn).map((d) => ({
           pedidoId: p.id_pedido,
@@ -593,7 +567,6 @@ export default function PedidosPage() {
         }))
       );
 
-  // Definición de categorías (igual que tenías) y su cálculo
   const categorias = useMemo(() => {
     const pendientes = (d: DetallePedido) => !d.entregado;
     const vencidos = (d: DetallePedido) => {
@@ -651,20 +624,16 @@ export default function PedidosPage() {
   }, [pedidos]);
 
   // Tabs UI state + paginación por tab (guardada por id)
-  const [activeTab, setActiveTab] = useState<string>(
-    categorias[0]?.id ?? "pendientes"
-  );
+  const [activeTab, setActiveTab] = useState<string>(categorias[0]?.id ?? "pendientes");
   const [pageByTab, setPageByTab] = useState<Record<string, number>>(() => {
     const rec: Record<string, number> = {};
     categorias.forEach((c) => (rec[c.id] = 1));
     return rec;
   });
 
-  // Si cambia la lista de categorías (por ejemplo tras carga), asegurar activeTab válido
   useEffect(() => {
     if (!categorias.find((c) => c.id === activeTab))
       setActiveTab(categorias[0]?.id ?? "pendientes");
-    // ensure pageByTab has keys
     setPageByTab((prev) => {
       const next = { ...prev };
       categorias.forEach((c) => {
@@ -684,18 +653,11 @@ export default function PedidosPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold">Pedidos registrados</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Administración de entregas y seguimiento por fechas.
-          </p>
+          <p className="text-sm text-gray-600 mt-1">Administración de entregas y seguimiento por fechas.</p>
         </div>
 
         <div className="flex items-center gap-3">
-          <Link
-            to="/pedidos/crear"
-            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            + Registrar pedido
-          </Link>
+          <Link to="/pedidos/crear" className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">+ Registrar pedido</Link>
         </div>
       </div>
 
@@ -715,13 +677,7 @@ export default function PedidosPage() {
                 aria-current={active ? "true" : undefined}
               >
                 <span>{c.label}</span>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full ${
-                    active ? "bg-white/20" : "bg-gray-100 text-gray-700"
-                  }`}
-                >
-                  {count}
-                </span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${active ? "bg-white/20" : "bg-gray-100 text-gray-700"}`}>{count}</span>
               </button>
             );
           })}
@@ -740,6 +696,7 @@ export default function PedidosPage() {
                 itemsPerPage={20}
                 onToggleEntrega={toggleEntrega}
                 onEliminar={handleEliminar}
+                isAdmin={esAdministrador}
               />
             ) : null
           )}
@@ -771,28 +728,14 @@ export default function PedidosPage() {
                     <td className="px-4 py-2">{p.id_pedido}</td>
                     <td className="px-4 py-2">{p.cliente}</td>
                     <td className="px-4 py-2">{p.direccion}</td>
-                    <td className="px-4 py-2">
-                      <DateChip dateStr={p.fecha_creacion_pedido} />
-                    </td>
-                    <td className="px-4 py-2">
-                      {p.detalles?.length ?? 0} ítem(s)
-                    </td>
-                    <td className="px-4 py-2">
-                      <Link
-                        to={`/pedidos/${p.id_pedido}`}
-                        className="text-sky-600 hover:underline text-sm"
-                      >
-                        Ver
-                      </Link>
-                    </td>
+                    <td className="px-4 py-2"><DateChip dateStr={p.fecha_creacion_pedido} /></td>
+                    <td className="px-4 py-2">{p.detalles?.length ?? 0} ítem(s)</td>
+                    <td className="px-4 py-2"><Link to={`/pedidos/${p.id_pedido}`} className="text-sky-600 hover:underline text-sm">Ver</Link></td>
                   </tr>
                 ))}
-              {pedidos.filter((p) => p.estado_pedido === "Cancelado").length ===
-                0 && (
+              {pedidos.filter((p) => p.estado_pedido === "Cancelado").length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center py-6 text-gray-500">
-                    No hay pedidos cancelados
-                  </td>
+                  <td colSpan={6} className="text-center py-6 text-gray-500">No hay pedidos cancelados</td>
                 </tr>
               )}
             </tbody>
@@ -801,48 +744,27 @@ export default function PedidosPage() {
 
         {/* Mobile cards (igual estilo que las otras tablas móviles) */}
         <div className="md:hidden space-y-3">
-          {pedidos.filter((p) => p.estado_pedido === "Cancelado").length ===
-          0 ? (
-            <div className="p-4 border rounded text-center text-gray-500">
-              No hay pedidos cancelados
-            </div>
+          {pedidos.filter((p) => p.estado_pedido === "Cancelado").length === 0 ? (
+            <div className="p-4 border rounded text-center text-gray-500">No hay pedidos cancelados</div>
           ) : (
             pedidos
               .filter((p) => p.estado_pedido === "Cancelado")
               .map((p) => (
-                <article
-                  key={p.id_pedido}
-                  className="p-3 border rounded bg-white shadow-sm"
-                >
+                <article key={p.id_pedido} className="p-3 border rounded bg-white shadow-sm">
                   <div className="flex justify-between items-start gap-3">
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium">
-                          Pedido #{p.id_pedido}
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          {p.detalles?.length ?? 0} ítem(s)
-                        </div>
+                        <div className="text-sm font-medium">Pedido #{p.id_pedido}</div>
+                        <div className="text-xs text-gray-600">{p.detalles?.length ?? 0} ítem(s)</div>
                       </div>
-                      <div className="text-sm text-gray-700 mt-1">
-                        {p.cliente}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {p.direccion}
-                      </div>
-                      <div className="mt-2">
-                        <DateChip dateStr={p.fecha_creacion_pedido} />
-                      </div>
+                      <div className="text-sm text-gray-700 mt-1">{p.cliente}</div>
+                      <div className="text-xs text-gray-500 mt-1">{p.direccion}</div>
+                      <div className="mt-2"><DateChip dateStr={p.fecha_creacion_pedido} /></div>
                     </div>
 
                     <div className="flex flex-col items-end gap-2">
                       <div className="flex flex-col items-end text-sm">
-                        <Link
-                          to={`/pedidos/${p.id_pedido}`}
-                          className="text-sky-600 hover:underline"
-                        >
-                          Ver
-                        </Link>
+                        <Link to={`/pedidos/${p.id_pedido}`} className="text-sky-600 hover:underline">Ver</Link>
                       </div>
                     </div>
                   </div>
@@ -868,10 +790,7 @@ export default function PedidosPage() {
           }
         }}
       >
-        <p className="text-sm text-gray-700">
-          El pedido <span className="font-medium">#{modalOk?.pedidoId}</span> ha
-          completado todas las entregas.
-        </p>
+        <p className="text-sm text-gray-700">El pedido <span className="font-medium">#{modalOk?.pedidoId}</span> ha completado todas las entregas.</p>
       </Modal>
 
       {/* Modal: Error genérico / falta stock / cancelado / reversión */}
@@ -896,11 +815,7 @@ export default function PedidosPage() {
         onPrimary={confirmEliminar}
         maxWidthClass="max-w-md"
       >
-        <p className="text-sm text-gray-700">
-          ¿Estás segura/o de que deseas eliminar el pedido{" "}
-          <span className="font-medium">#{pendingDeleteId}</span>? Esta acción
-          no se puede deshacer.
-        </p>
+        <p className="text-sm text-gray-700">¿Estás segura/o de que deseas eliminar el pedido <span className="font-medium">#{pendingDeleteId}</span>? Esta acción no se puede deshacer.</p>
       </Modal>
 
       {/* Modal: Éxito (por ejemplo eliminación correcta) */}

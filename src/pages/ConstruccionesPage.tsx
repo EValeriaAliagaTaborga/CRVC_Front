@@ -1,4 +1,3 @@
-// src/pages/ConstruccionesPage.tsx
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
@@ -7,9 +6,6 @@ import { getUsuario } from "../services/user";
 import Modal from "../components/Modal";
 import SearchInput from "../components/SearchInput";
 import ActionGroup from "../components/ActionGroup";
-
-const usuario = getUsuario();
-const esAdministrador = usuario?.rol === "1";
 
 interface Construccion {
   id_construccion: number;
@@ -34,6 +30,15 @@ const ConstruccionesPage: React.FC = () => {
   const [modalError, setModalError] = useState<null | { title: string; message: string }>(null);
   const [successModal, setSuccessModal] = useState<null | { title: string; message?: string }>(null);
 
+  // obtener usuario/rol en runtime (evita evaluar en top-level)
+  const usuario = getUsuario();
+  const esAdministrador = Boolean(
+    usuario?.rol === "1" ||
+      usuario?.rol === "Administrador" ||
+      String(usuario?.rol).toLowerCase() === "administrador" ||
+      String(usuario?.rol).toLowerCase() === "admin"
+  );
+
   useEffect(() => {
     const fetchConstrucciones = async () => {
       try {
@@ -53,13 +58,22 @@ const ConstruccionesPage: React.FC = () => {
   }, []);
 
   const handleDelete = (id: number) => {
-    // abrir modal de confirmación
+    if (!esAdministrador) {
+      setModalError({ title: "Permiso denegado", message: "Solo un Administrador puede eliminar construcciones." });
+      return;
+    }
     setPendingDeleteId(id);
   };
 
   const confirmDelete = async () => {
     const id = pendingDeleteId;
     if (!id) return;
+    if (!esAdministrador) {
+      setPendingDeleteId(null);
+      setModalError({ title: "Permiso denegado", message: "Solo un Administrador puede eliminar construcciones." });
+      return;
+    }
+
     setDeleting(true);
     try {
       await axios.delete(`http://localhost:3000/api/construcciones/${id}`, {
@@ -237,9 +251,7 @@ const ConstruccionesPage: React.FC = () => {
         onPrimary={confirmDelete}
         maxWidthClass="max-w-md"
       >
-        <p className="text-sm text-gray-700">
-          ¿Estás seguro/a de eliminar la construcción <span className="font-medium">#{pendingDeleteId}</span>? Esta acción no se puede deshacer.
-        </p>
+        <p className="text-sm text-gray-700">¿Estás seguro/a de eliminar la construcción <span className="font-medium">#{pendingDeleteId}</span>? Esta acción no se puede deshacer.</p>
       </Modal>
 
       {/* Modal: Error */}

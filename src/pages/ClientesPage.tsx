@@ -7,9 +7,6 @@ import Modal from "../components/Modal";
 import SearchInput from "../components/SearchInput";
 import ActionGroup from "../components/ActionGroup";
 
-const usuario = getUsuario();
-const esAdministrador = usuario?.rol === "1";
-
 interface Cliente {
   id_cliente: number;
   nombre_empresa: string;
@@ -33,6 +30,15 @@ export default function ClientesPage() {
   const [successModal, setSuccessModal] = useState<null | { title: string; message?: string }>(null);
 
   const navigate = useNavigate();
+
+  // obtener usuario y role en runtime (evita evaluar en top-level)
+  const usuario = getUsuario();
+  const esAdministrador = Boolean(
+    usuario?.rol === "1" ||
+      usuario?.rol === "Administrador" ||
+      String(usuario?.rol).toLowerCase() === "administrador" ||
+      String(usuario?.rol).toLowerCase() === "admin"
+  );
 
   useEffect(() => {
     const fetchClientes = async () => {
@@ -79,12 +85,22 @@ export default function ClientesPage() {
 
   // abrir modal de confirmación (no eliminar inmediatamente)
   const handleDelete = (id: number) => {
+    if (!esAdministrador) {
+      setModalError({ title: "Permiso denegado", message: "Solo un Administrador puede eliminar clientes." });
+      return;
+    }
     setPendingDeleteId(id);
   };
 
   const confirmDelete = async () => {
     const id = pendingDeleteId;
     if (!id) return;
+    if (!esAdministrador) {
+      setPendingDeleteId(null);
+      setModalError({ title: "Permiso denegado", message: "Solo un Administrador puede eliminar clientes." });
+      return;
+    }
+
     setDeleting(true);
     try {
       await axios.delete(`http://localhost:3000/api/clientes/${id}`, {
@@ -270,9 +286,7 @@ export default function ClientesPage() {
         onPrimary={confirmDelete}
         maxWidthClass="max-w-md"
       >
-        <p className="text-sm text-gray-700">
-          ¿Estás segura/o de que deseas eliminar el cliente <span className="font-medium">#{pendingDeleteId}</span>? Esta acción no se puede deshacer.
-        </p>
+        <p className="text-sm text-gray-700">¿Estás segura/o de que deseas eliminar el cliente <span className="font-medium">#{pendingDeleteId}</span>? Esta acción no se puede deshacer.</p>
       </Modal>
 
       {/* Success */}

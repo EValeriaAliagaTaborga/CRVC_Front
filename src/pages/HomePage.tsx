@@ -219,7 +219,7 @@ const HomePage = () => {
 
         {/* Quick KPIs */}
         <div className="bg-white rounded shadow p-4">
-          <h3 className="font-semibold mb-2">KPIs rápidos</h3>
+          <h3 className="font-semibold mb-2">Valores rápidos</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 bg-gray-50 rounded">
               <p className="text-xs text-gray-500">Órdenes en progreso</p>

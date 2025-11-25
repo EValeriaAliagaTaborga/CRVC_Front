@@ -1,8 +1,8 @@
-// src/pages/ProductosPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { getToken } from "../services/auth";
+import { getUsuario } from "../services/user";
 import Modal from "../components/Modal";
 import SearchInput from "../components/SearchInput";
 import ActionGroup from "../components/ActionGroup";
@@ -53,6 +53,15 @@ const ProductosPage = () => {
   const [deleting, setDeleting] = useState(false);
   const [successModal, setSuccessModal] = useState<null | { title: string; message?: string }>(null);
 
+  // obtener usuario/rol en runtime
+  const usuario = getUsuario();
+  const esAdministrador = Boolean(
+    usuario?.rol === "1" ||
+      usuario?.rol === "Administrador" ||
+      String(usuario?.rol).toLowerCase() === "administrador" ||
+      String(usuario?.rol).toLowerCase() === "admin"
+  );
+
   useEffect(() => {
     const fetchProductos = async () => {
       setLoading(true);
@@ -95,6 +104,12 @@ const ProductosPage = () => {
   // schedule actual delete (called from confirm modal)
   const confirmEliminar = async () => {
     if (!pendingDelete) return;
+    if (!esAdministrador) {
+      setPendingDelete(null);
+      setModalError({ title: "Permiso denegado", message: "Solo un Administrador puede eliminar productos." });
+      return;
+    }
+
     setDeleting(true);
     try {
       await axios.delete(`http://localhost:3000/api/productos/${pendingDelete.id}`, {
@@ -117,6 +132,10 @@ const ProductosPage = () => {
 
   // when user clicks "Eliminar" we just open the modal
   const onEliminarClick = (p: Producto) => {
+    if (!esAdministrador) {
+      setModalError({ title: "Permiso denegado", message: "Solo un Administrador puede eliminar productos." });
+      return;
+    }
     setPendingDelete({ id: p.id_producto, nombre: `${p.nombre_producto} (${p.tipo})` });
   };
 
@@ -251,12 +270,16 @@ const ProductosPage = () => {
                           ariaLabel: `Editar producto ${p.id_producto}`,
                           variant: "link",
                         }}
-                        secondary={{
-                          label: "Eliminar",
-                          onClick: () => onEliminarClick(p),
-                          ariaLabel: `Eliminar producto ${p.id_producto}`,
-                          variant: "danger",
-                        }}
+                        secondary={
+                          esAdministrador
+                            ? {
+                                label: "Eliminar",
+                                onClick: () => onEliminarClick(p),
+                                ariaLabel: `Eliminar producto ${p.id_producto}`,
+                                variant: "danger",
+                              }
+                            : undefined
+                        }
                       />
                       <button
                         onClick={() => openKardex(p)}
@@ -301,12 +324,16 @@ const ProductosPage = () => {
                         ariaLabel: `Editar producto ${p.id_producto}`,
                         variant: "link",
                       }}
-                      secondary={{
-                        label: "Eliminar",
-                        onClick: () => onEliminarClick(p),
-                        ariaLabel: `Eliminar producto ${p.id_producto}`,
-                        variant: "danger",
-                      }}
+                      secondary={
+                        esAdministrador
+                          ? {
+                              label: "Eliminar",
+                              onClick: () => onEliminarClick(p),
+                              ariaLabel: `Eliminar producto ${p.id_producto}`,
+                              variant: "danger",
+                            }
+                          : undefined
+                      }
                     />
                     <button
                       onClick={() => openKardex(p)}
@@ -491,9 +518,7 @@ const ProductosPage = () => {
         onPrimary={confirmEliminar}
         maxWidthClass="max-w-md"
       >
-        <p className="text-sm text-gray-700">
-          ¿Estás segura/o de que deseas eliminar el producto <span className="font-medium">{pendingDelete?.nombre}</span>? Esta acción no se puede deshacer.
-        </p>
+        <p className="text-sm text-gray-700">¿Estás segura/o de que deseas eliminar el producto <span className="font-medium">{pendingDelete?.nombre}</span>? Esta acción no se puede deshacer.</p>
       </Modal>
 
       {/* Error modal */}

@@ -19,6 +19,25 @@ interface OrdenProduccion {
   estado_orden: string;
 }
 
+interface DetallePedido {
+  id_detalle_pedido: number;
+  id_producto: string;
+  cantidad_pedida: number;
+  entregado: boolean;
+  fecha_estimada_entrega?: string | null;
+  nombre_producto?: string;
+  tipo?: string;
+}
+
+interface Pedido {
+  id_pedido: number;
+  estado_pedido: string;
+  fecha_creacion_pedido?: string;
+  detalles: DetallePedido[];
+  cliente?: string;
+  direccion?: string;
+}
+
 interface Demanda {
   id_demanda: number;
   id_producto: string;
@@ -54,23 +73,146 @@ const ProduccionPage = () => {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const [o, d] = await Promise.all([
+        const [oRes, dResPromise, pResPromise] = await Promise.allSettled([
           axios.get("http://localhost:3000/api/produccion", { headers }),
           axios.get("http://localhost:3000/api/produccion/demandas", { headers }),
+          axios.get("http://localhost:3000/api/pedidos", { headers }),
         ]);
-        setOrdenes(o.data || []);
-        setDemandas(d.data || []);
+
+        if (oRes.status === "rejected") throw oRes.reason;
+        const oData = (oRes as PromiseFulfilledResult<any>).value.data || [];
+        setOrdenes(oData);
+
+        const dRes = dResPromise.status === "fulfilled" ? (dResPromise as PromiseFulfilledResult<any>).value : { data: [] };
+        const pRes = pResPromise.status === "fulfilled" ? (pResPromise as PromiseFulfilledResult<any>).value : { data: [] };
+
+        const pedidos: Pedido[] = pRes.data || [];
+
+        // construir demandas desde pedidos (excluye cancelados y ignora fechas pasadas)
+        const demandasDesdePedidos = buildDemandasFromPedidos(pedidos);
+
+        if (demandasDesdePedidos.length > 0) {
+          setDemandas(demandasDesdePedidos);
+        } else {
+          setDemandas(dRes.data || []);
+        }
       } catch (err: any) {
+        console.error("Error fetch produccion:", err);
         setModalError({
           title: "Error al cargar datos de producción",
-          message: err?.response?.data?.message || "No se pudieron cargar los datos. Intenta nuevamente.",
+          message: err?.response?.data?.message || err?.message || "No se pudieron cargar los datos. Intenta nuevamente.",
         });
       } finally {
         setLoading(false);
       }
     };
+
     fetchAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Helper: reconstruye demandas agrupando detalles de pedidos activos (excluye pedidos con estado 'Cancelado')
+  // El cambio principal: al calcular fecha_objetivo se selecciona la fecha más próxima >= hoy; si no hay, es null.
+  function buildDemandasFromPedidos(pedidos: Pedido[]): Demanda[] {
+    if (!Array.isArray(pedidos) || pedidos.length === 0) return [];
+
+    type Agg = {
+      id_producto: string;
+      nombre_producto: string;
+      tipo: string;
+      cantidad: number;
+      // earliest future objetivo among details
+      fecha_objetivo?: string | null;
+      actualizado_en: string;
+    };
+
+    const map = new Map<string, Agg>();
+    const today = new Date();
+    // zero time of today to compare dates ignoring time
+    today.setHours(0, 0, 0, 0);
+
+    pedidos.forEach((p) => {
+      if (!p) return;
+      if (String(p.estado_pedido).toLowerCase() === "cancelado") return; // skip cancelled
+
+      (p.detalles || []).forEach((d) => {
+        if (!d) return;
+        if (d.entregado) return; // only pending details
+
+        const idProd = String(d.id_producto ?? "").trim();
+        if (!idProd) return;
+
+        const tipo = d.tipo ?? "";
+        const key = `${idProd}::${tipo}`.toLowerCase();
+        const nombre = d.nombre_producto ?? "";
+        const cantidad = Number(d.cantidad_pedida ?? 0);
+
+        // normalize fecha detalle and only consider if it's a valid date and >= today
+        let fechaDetalle: string | null = null;
+        if (d.fecha_estimada_entrega) {
+          const dt = new Date(d.fecha_estimada_entrega);
+          if (!isNaN(dt.getTime())) {
+            const dtZero = new Date(dt);
+            dtZero.setHours(0, 0, 0, 0);
+            if (dtZero.getTime() >= today.getTime()) {
+              fechaDetalle = d.fecha_estimada_entrega!;
+            } else {
+              // fecha pasada -> ignore for objetivo selection
+              fechaDetalle = null;
+            }
+          }
+        }
+
+        if (!map.has(key)) {
+          map.set(key, {
+            id_producto: idProd,
+            nombre_producto: nombre,
+            tipo,
+            cantidad,
+            fecha_objetivo: fechaDetalle,
+            actualizado_en: new Date().toISOString(),
+          });
+        } else {
+          const agg = map.get(key)!;
+          agg.cantidad += cantidad;
+
+          // elegir fecha objetivo más próxima (earliest) entre las que sean futuras
+          const existing = agg.fecha_objetivo ? new Date(agg.fecha_objetivo) : null;
+          const candidate = fechaDetalle ? new Date(fechaDetalle) : null;
+
+          if (candidate) {
+            if (!existing || candidate < existing) {
+              agg.fecha_objetivo = fechaDetalle!;
+            }
+          }
+          agg.actualizado_en = new Date().toISOString();
+        }
+      });
+    });
+
+    const result: Demanda[] = Array.from(map.values()).map((v, idx) => ({
+      id_demanda: idx + 1,
+      id_producto: v.id_producto,
+      nombre_producto: v.nombre_producto,
+      tipo: v.tipo,
+      cantidad_pendiente: v.cantidad,
+      fecha_objetivo: v.fecha_objetivo ?? null,
+      actualizado_en: v.actualizado_en,
+    }));
+
+    // ordenar por fecha objetivo (nulls last) y luego por cantidad descendente
+    result.sort((a, b) => {
+      if (!a.fecha_objetivo && b.fecha_objetivo) return 1;
+      if (a.fecha_objetivo && !b.fecha_objetivo) return -1;
+      if (!a.fecha_objetivo && !b.fecha_objetivo) return b.cantidad_pendiente - a.cantidad_pendiente;
+      const da = new Date(a.fecha_objetivo!).getTime();
+      const db = new Date(b.fecha_objetivo!).getTime();
+      if (da !== db) return da - db;
+      return b.cantidad_pendiente - a.cantidad_pendiente;
+    });
+
+    return result;
+  }
 
   // Filtrado de órdenes
   const ordenesFiltradas = ordenes.filter((orden) => {
@@ -89,15 +231,15 @@ const ProduccionPage = () => {
   const inicio = (paginaActual - 1) * elementosPorPagina;
   const ordenesPaginadas = ordenesFiltradas.slice(inicio, inicio + elementosPorPagina);
 
-  // Filtrado demandas
+  // Filtrado demandas (search)
   const demandasFiltradas = useMemo(() => {
     const q = filtroDemanda.trim().toLowerCase();
     if (!q) return demandas;
     return demandas.filter(
-      d =>
-        d.id_producto.toLowerCase().includes(q) ||
-        d.nombre_producto.toLowerCase().includes(q) ||
-        d.tipo.toLowerCase().includes(q)
+      (d) =>
+        (d.id_producto || "").toString().toLowerCase().includes(q) ||
+        (d.nombre_producto || "").toLowerCase().includes(q) ||
+        (d.tipo || "").toLowerCase().includes(q)
     );
   }, [demandas, filtroDemanda]);
 
@@ -137,7 +279,7 @@ const ProduccionPage = () => {
           <div>
             <h3 className="text-lg font-semibold">Demandas pendientes</h3>
             <p className="text-gray-500 text-sm">
-              Recomendación automática basada en pedidos registrados.
+              Recomendación automática basada en pedidos registrados (se excluyen pedidos cancelados).
             </p>
           </div>
 
@@ -170,7 +312,7 @@ const ProduccionPage = () => {
             </thead>
             <tbody>
               {demandasFiltradas.map((d) => (
-                <tr key={d.id_demanda} className="border-t">
+                <tr key={`${d.id_producto}-${d.tipo}-${d.id_demanda}`} className="border-t">
                   <td className="px-3 py-2">{d.id_producto}</td>
                   <td className="px-3 py-2">{d.nombre_producto}</td>
                   <td className="px-3 py-2">{d.tipo}</td>
@@ -203,7 +345,7 @@ const ProduccionPage = () => {
             <div className="p-4 border rounded text-center text-gray-500">No hay demandas para mostrar.</div>
           ) : (
             demandasFiltradas.map((d) => (
-              <article key={d.id_demanda} className="p-3 border rounded bg-white shadow-sm">
+              <article key={`${d.id_producto}-${d.tipo}-${d.id_demanda}`} className="p-3 border rounded bg-white shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="text-sm font-medium">{d.nombre_producto} <span className="text-xs text-gray-500">({d.id_producto})</span></div>
@@ -229,7 +371,7 @@ const ProduccionPage = () => {
         </div>
       </section>
 
-      {/* Filtros Órdenes (usa SearchInput para producto) */}
+      {/* Resto (filtros, tabla órdenes, paginación, modals) — idéntico al anterior */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <SearchInput
           id="filter-vagon"
@@ -267,7 +409,6 @@ const ProduccionPage = () => {
         </div>
       </div>
 
-      {/* Tabla Órdenes (desktop) */}
       <div className="bg-white shadow-md rounded overflow-x-auto">
         <div className="hidden md:block">
           <table className="min-w-full text-sm table-auto">
@@ -322,7 +463,6 @@ const ProduccionPage = () => {
           </table>
         </div>
 
-        {/* Mobile cards for órdenes */}
         <div className="md:hidden p-3 space-y-3">
           {ordenesPaginadas.length === 0 ? (
             <div className="text-center py-4 text-gray-500">No hay órdenes que coincidan con los filtros.</div>
@@ -361,7 +501,6 @@ const ProduccionPage = () => {
         </div>
       </div>
 
-      {/* Paginación */}
       <div className="flex justify-center mt-4 space-x-2">
         {Array.from({ length: totalPaginas }, (_, i) => (
           <button
@@ -374,7 +513,6 @@ const ProduccionPage = () => {
         ))}
       </div>
 
-      {/* Error modal */}
       <Modal
         open={!!modalError}
         title={modalError?.title}
